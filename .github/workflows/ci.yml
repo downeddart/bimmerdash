@@ -19,7 +19,7 @@ jobs:
           POSTGRES_PASSWORD: test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres" --health-interval 5s --health-retries 20
     env:
       BIMMERDASH_TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
     defaults:
@@ -44,7 +44,7 @@ jobs:
           POSTGRES_PASSWORD: test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-retries 20
+          --health-cmd "pg_isready -h 127.0.0.1 -U postgres" --health-interval 5s --health-retries 20
     env:
       BIMMERDASH_TEST_DATABASE_URL: postgresql://postgres:test@localhost:5432/postgres
     defaults:
