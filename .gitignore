@@ -1,0 +1,21 @@
+# Secrets and local config — never commit
+.env
+*.env
+!.env.example
+tokens.json
+
+# Collected vehicle data (contains VIN, GPS positions)
+data/
+*.jsonl
+*.sql.gz
+*.dump
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/

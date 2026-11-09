@@ -1,0 +1,12 @@
+services:
+  collector:
+    build: ./collector
+    image: bimmerdash-collector:local
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - bimmerdash-data:/data
+    command: ["stream"]
+
+volumes:
+  bimmerdash-data:
