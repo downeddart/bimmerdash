@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import psycopg
@@ -120,7 +121,73 @@ def stream_status(conn: psycopg.Connection) -> dict:
                (SELECT count(*) FROM api_calls WHERE time > now() - interval '24 hours')
         """
     ).fetchone()
-    return {"last_message_at": row[0], "messages_last_hour": row[1], "api_calls_24h": row[2]}
+    return {
+        "last_message_at": row[0],
+        "messages_last_hour": row[1],
+        "api_calls_24h": row[2],
+        "prices": price_freshness(conn),
+    }
+
+
+# DESNZ publishes each Monday/Tuesday for the previous Monday, so the newest week is
+# normally 7-9 days old. Station prices sync every 30 minutes.
+UK_AVERAGE_MAX_AGE = timedelta(days=10)
+UK_AVERAGE_MAX_CHECK_AGE = timedelta(days=2)
+STATION_MAX_AGE = timedelta(hours=2)
+
+
+def classify_freshness(
+    latest_week: date | None,
+    averages_checked_at: datetime | None,
+    stations_synced_at: datetime | None,
+    now: datetime,
+) -> dict:
+    """ok / stale / missing (UK averages) and ok / stale / off (station prices)."""
+    if latest_week is None:
+        uk = "missing"
+    elif now.date() - latest_week > UK_AVERAGE_MAX_AGE or (
+        averages_checked_at is None or now - averages_checked_at > UK_AVERAGE_MAX_CHECK_AGE
+    ):
+        uk = "stale"
+    else:
+        uk = "ok"
+    if stations_synced_at is None:
+        stations = "off"
+    elif now - stations_synced_at > STATION_MAX_AGE:
+        stations = "stale"
+    else:
+        stations = "ok"
+    return {
+        "uk_averages": {
+            "status": uk,
+            "latest_week": latest_week,
+            "checked_at": averages_checked_at,
+        },
+        "station_prices": {"status": stations, "synced_at": stations_synced_at},
+    }
+
+
+def price_freshness(conn: psycopg.Connection, now: datetime | None = None) -> dict:
+    now = now or datetime.now(UTC)
+    present = conn.execute(
+        "SELECT to_regclass('uk_average_fuel_prices') IS NOT NULL,"
+        " to_regclass('fuel_finder_state') IS NOT NULL"
+    ).fetchone()
+    latest_week = checked = synced = None
+    if present[0]:
+        latest_week = conn.execute("SELECT max(week_start) FROM uk_average_fuel_prices").fetchone()[
+            0
+        ]
+    if present[0]:  # migration 003 adds the averages table and uk_averages_at together
+        row = conn.execute(
+            "SELECT uk_averages_at, incremental_at FROM fuel_finder_state"
+        ).fetchone()
+        if row:
+            checked, synced = row
+    elif present[1]:
+        row = conn.execute("SELECT incremental_at FROM fuel_finder_state").fetchone()
+        synced = row[0] if row else None
+    return classify_freshness(latest_week, checked, synced, now)
 
 
 def _colour(raw: str | None) -> str | None:

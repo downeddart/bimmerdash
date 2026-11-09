@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from './lib/api.js';
-  import { ago } from './lib/format.js';
+  import { ago, shortDate } from './lib/format.js';
   import Overview from './pages/Overview.svelte';
   import Data from './pages/Data.svelte';
   import Placeholder from './pages/Placeholder.svelte';
@@ -21,6 +21,24 @@
   let streamAge = $derived(
     status?.last_message_at ? (Date.now() - new Date(status.last_message_at)) / 1000 : Infinity
   );
+
+  const DOT = { ok: 'var(--ok)', stale: 'var(--warn)', missing: 'var(--warn)', off: '#6b7280' };
+  let prices = $derived(status?.prices ?? null);
+  let ukLabel = $derived.by(() => {
+    const u = prices?.uk_averages;
+    if (!u) return null;
+    if (u.status === 'missing') return 'UK averages not loaded yet';
+    const to = `to ${shortDate(u.latest_week)}`;
+    return u.status === 'stale' ? `UK averages out of date (${to})` : `UK averages ${to}`;
+  });
+  let stationLabel = $derived.by(() => {
+    const st = prices?.station_prices;
+    if (!st) return null;
+    if (st.status === 'off') return 'Station prices off';
+    return st.status === 'stale'
+      ? `Station prices stale (${ago(st.synced_at)})`
+      : `Station prices ${ago(st.synced_at)}`;
+  });
 
   function currentPath() {
     const p = location.hash.replace(/^#/, '') || '/';
@@ -81,6 +99,15 @@
       </div>
       <div class="small muted">Last message {ago(status?.last_message_at)}</div>
       {#if status}<div class="small muted">API calls today: {status.api_calls_24h} / 50</div>{/if}
+      {#if prices}
+        <div class="sep" role="presentation"></div>
+        <div class="row small" title="UK weekly average pump prices (DESNZ), used to estimate older fill-ups">
+          <span class="dot" style:background={DOT[prices.uk_averages.status]}></span>{ukLabel}
+        </div>
+        <div class="row small" title={prices.station_prices.status === 'off' ? 'Add Fuel Finder credentials to .env to record station prices' : 'Live forecourt prices from the UK Fuel Finder scheme'}>
+          <span class="dot" style:background={DOT[prices.station_prices.status]}></span>{stationLabel}
+        </div>
+      {/if}
     </div>
   </nav>
 
@@ -126,12 +153,19 @@
   .links a.active { background: var(--card-2); color: var(--text); }
   .stream { margin-top: auto; padding: 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
   .row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+  .row.small { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .sep { height: 1px; background: var(--line); margin: 4px 0; }
+  @media (min-width: 821px) {
+    /* Keep the nav (and its status box) on screen while long pages scroll. */
+    nav { position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; }
+  }
   main { flex: 999 1 560px; min-width: 0; padding: 32px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 24px; }
 
   @media (max-width: 820px) {
     nav { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; gap: 14px; }
     .links { flex-direction: row; overflow-x: auto; }
     .links a { flex: none; }
-    .stream { display: none; }
+    .stream { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 12px; }
+    .stream > .small.muted, .sep { display: none; }
   }
 </style>

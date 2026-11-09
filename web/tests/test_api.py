@@ -84,5 +84,30 @@ def test_api_endpoints(client):
     assert o["odometer"]["value"] == 106682 and o["doors"] == "SECURED"
     keys = {r["key"] for r in client.get(f"/api/vehicles/{VIN}/latest").json()}
     assert "vehicle.vehicle.travelledDistance" in keys
-    assert client.get("/api/status").json()["last_message_at"]
+    status = client.get("/api/status").json()
+    assert status["last_message_at"]
+    assert status["prices"]["uk_averages"]["status"] == "missing"
+    assert status["prices"]["station_prices"]["status"] == "off"
     assert client.get("/api/vehicles/not-a-vin/overview").status_code == 404
+
+
+def test_classify_freshness():
+    from datetime import UTC, date, datetime, timedelta
+
+    from bimmerdash_web.queries import classify_freshness
+
+    now = datetime(2026, 11, 9, 21, 0, tzinfo=UTC)
+    f = classify_freshness(
+        date(2026, 11, 2), now - timedelta(hours=3), now - timedelta(minutes=20), now
+    )
+    assert f["uk_averages"]["status"] == "ok" and f["station_prices"]["status"] == "ok"
+
+    # Newest week too old (publication stopped), or checks failing for days.
+    assert classify_freshness(date(2026, 10, 26), now, now, now)["uk_averages"]["status"] == "stale"
+    stale_check = classify_freshness(date(2026, 11, 2), now - timedelta(days=3), now, now)
+    assert stale_check["uk_averages"]["status"] == "stale"
+    assert classify_freshness(None, None, None, now)["uk_averages"]["status"] == "missing"
+
+    assert classify_freshness(None, None, None, now)["station_prices"]["status"] == "off"
+    old_sync = classify_freshness(None, None, now - timedelta(hours=3), now)
+    assert old_sync["station_prices"]["status"] == "stale"
