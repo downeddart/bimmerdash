@@ -30,10 +30,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
+      - run: pip install -e ".[dev]" pytest-github-actions-annotate-failures
       - run: ruff check .
       - run: ruff format --check .
-      - run: pytest -q
+      - run: pytest -q -p no:randomly
 
   test-web:
     runs-on: ubuntu-24.04
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e ../collector -e ".[dev]"
+      - run: pip install -e ../collector -e ".[dev]" pytest-github-actions-annotate-failures
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
