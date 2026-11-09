@@ -1,5 +1,7 @@
 # --- frontend build ---
-FROM node:22-alpine AS frontend
+# Static output is the same on every CPU, so build it natively on the build machine
+# (not under emulation) even when the final image targets arm64.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS frontend
 WORKDIR /fe
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
