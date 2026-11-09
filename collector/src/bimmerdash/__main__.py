@@ -126,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         level=os.environ.get("BIMMERDASH_LOG_LEVEL", "INFO").upper(),
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
+    # httpx logs full request URLs, which contain the VIN. Keep them out of shareable logs.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
     try:
         cfg = Config.from_env(require_client_id=args.command in ("login", "stream"))
     except ConfigError as e:
