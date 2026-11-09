@@ -20,7 +20,7 @@ def db():
     with psycopg.connect(URL, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
     d = Database(URL)
-    assert d.migrate() == ["001_init", "002_fuel_prices"]
+    assert d.migrate() == ["001_init", "002_fuel_prices", "003_uk_average_prices"]
     yield d
     d.close()
 
@@ -105,3 +105,15 @@ def test_fuel_prices_nearest_and_price_at(db):
     assert db.price_at("near", "E10", t(4, 12)) == (136.9, t(1, 7))
     assert db.price_at("near", "E10", t(9, 12))[0] == 134.9
     assert db.price_at("near", "E10", t(1, 6)) is None
+
+
+def test_uk_average_at(db):
+    from datetime import date
+
+    rows = [(date(2026, 10, 26), "petrol", 174.07), (date(2026, 11, 2), "petrol", 172.78)]
+    assert db.upsert_uk_averages(rows) == 2
+    db.upsert_uk_averages([(date(2026, 11, 2), "petrol", 172.5)])  # revision overwrites
+    assert db.uk_average_at("petrol", date(2026, 10, 30)) == (174.07, date(2026, 10, 26))
+    assert db.uk_average_at("petrol", date(2026, 11, 9))[0] == 172.5
+    assert db.uk_average_at("petrol", date(2020, 1, 1)) is None
+    assert db.fuel_finder_state()["uk_averages_at"] is None

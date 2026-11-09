@@ -168,13 +168,19 @@ class Database:
 
     def fuel_finder_state(self) -> dict:
         row = self.conn.execute(
-            "SELECT forecourts_at, full_prices_at, incremental_at FROM fuel_finder_state"
+            "SELECT forecourts_at, full_prices_at, incremental_at, uk_averages_at"
+            " FROM fuel_finder_state"
         ).fetchone()
         self.conn.commit()
-        return {"forecourts_at": row[0], "full_prices_at": row[1], "incremental_at": row[2]}
+        return {
+            "forecourts_at": row[0],
+            "full_prices_at": row[1],
+            "incremental_at": row[2],
+            "uk_averages_at": row[3],
+        }
 
     def set_fuel_finder_state(self, **fields) -> None:
-        allowed = {"forecourts_at", "full_prices_at", "incremental_at"}
+        allowed = {"forecourts_at", "full_prices_at", "incremental_at", "uk_averages_at"}
         assert set(fields) <= allowed
         sets = ", ".join(f"{k} = %s" for k in fields)
         self.conn.execute(f"UPDATE fuel_finder_state SET {sets}", tuple(fields.values()))
@@ -244,6 +250,27 @@ class Database:
             " WHERE node_id = %s AND fuel_type = %s AND effective_at <= %s"
             " ORDER BY effective_at DESC LIMIT 1",
             (node_id, fuel_type, at),
+        ).fetchone()
+        self.conn.commit()
+        return (row[0], row[1]) if row else None
+
+    def upsert_uk_averages(self, rows: list[tuple]) -> int:
+        """(week_start, fuel, price) rows. Revised figures overwrite earlier ones."""
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO uk_average_fuel_prices (week_start, fuel, price) VALUES (%s, %s, %s)"
+                " ON CONFLICT (fuel, week_start) DO UPDATE SET price = EXCLUDED.price",
+                rows,
+            )
+        self.conn.commit()
+        return len(rows)
+
+    def uk_average_at(self, fuel: str, on) -> tuple[float, object] | None:
+        """UK average price (pence/L) for the week containing `on`: (price, week_start)."""
+        row = self.conn.execute(
+            "SELECT price, week_start FROM uk_average_fuel_prices"
+            " WHERE fuel = %s AND week_start <= %s::date ORDER BY week_start DESC LIMIT 1",
+            (fuel, on),
         ).fetchone()
         self.conn.commit()
         return (row[0], row[1]) if row else None

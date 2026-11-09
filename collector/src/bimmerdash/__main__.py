@@ -112,17 +112,20 @@ def cmd_fetch_vehicle(cfg: Config) -> int:
 
 def cmd_prices(cfg: Config, once: bool) -> int:
     from .fuelfinder import FuelFinderClient, FuelFinderError, run_prices, sync_once
+    from .ukaverages import fetch_all
 
     if not once:
         return run_prices(cfg)
-    if not (cfg.fuel_finder_client_id and cfg.fuel_finder_client_secret):
-        print("Error: set BIMMERDASH_FUEL_FINDER_CLIENT_ID and _SECRET in .env", file=sys.stderr)
-        return 2
     db = _require_db(cfg)
     if db is None:
         return 2
     db.migrate()
-    with httpx.Client(timeout=60) as http:
+    with httpx.Client(timeout=60, headers={"User-Agent": "bimmerdash"}) as http:
+        n = db.upsert_uk_averages(fetch_all(http))
+        print(f"UK weekly averages: {n} row(s).")
+        if not (cfg.fuel_finder_client_id and cfg.fuel_finder_client_secret):
+            print("Fuel Finder not configured: skipping station prices.")
+            return 0
         client = FuelFinderClient(http, cfg.fuel_finder_client_id, cfg.fuel_finder_client_secret)
         try:
             counts = sync_once(client, db)

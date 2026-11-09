@@ -200,8 +200,28 @@ def sync_once(client: FuelFinderClient, db, now: datetime | None = None) -> dict
     return counts
 
 
+UK_AVERAGES_EVERY = timedelta(hours=24)
+
+
+def sync_uk_averages(http: httpx.Client, db, now: datetime | None = None) -> int | None:
+    """Refresh DESNZ weekly UK averages once a day. Returns rows stored, or None if not due."""
+    from .ukaverages import fetch_all
+
+    now = now or datetime.now(UTC)
+    last = db.fuel_finder_state().get("uk_averages_at")
+    if last is not None and now - last < UK_AVERAGES_EVERY:
+        return None
+    n = db.upsert_uk_averages(fetch_all(http))
+    db.set_fuel_finder_state(uk_averages_at=now)
+    return n
+
+
 def run_prices(cfg, interval: float = 1800) -> int:
-    """Long-running price sync (compose service `prices`)."""
+    """Long-running price sync (compose service `prices`).
+
+    UK weekly averages (no credentials needed) daily; Fuel Finder station prices every
+    `interval` seconds when credentials are configured.
+    """
     import signal
 
     from .db import Database
@@ -210,33 +230,47 @@ def run_prices(cfg, interval: float = 1800) -> int:
     signal.signal(signal.SIGTERM, lambda *_: stop.set())
     signal.signal(signal.SIGINT, lambda *_: stop.set())
 
-    if not (cfg.fuel_finder_client_id and cfg.fuel_finder_client_secret):
-        log.warning("Fuel Finder not configured (BIMMERDASH_FUEL_FINDER_CLIENT_ID/_SECRET); idling")
-        stop.wait()
-        return 0
     if not cfg.database_url:
         log.error("BIMMERDASH_DATABASE_URL is not set")
         return 2
+    has_ff = bool(cfg.fuel_finder_client_id and cfg.fuel_finder_client_secret)
+    if not has_ff:
+        log.warning(
+            "Fuel Finder not configured (BIMMERDASH_FUEL_FINDER_CLIENT_ID/_SECRET):"
+            " syncing UK weekly averages only"
+        )
 
     db = Database(cfg.database_url)
     db.migrate()
-    with httpx.Client(timeout=60) as http:
-        client = FuelFinderClient(
-            http, cfg.fuel_finder_client_id, cfg.fuel_finder_client_secret, sleep=stop.wait
+    with httpx.Client(timeout=60, headers={"User-Agent": "bimmerdash"}) as http:
+        client = (
+            FuelFinderClient(
+                http, cfg.fuel_finder_client_id, cfg.fuel_finder_client_secret, sleep=stop.wait
+            )
+            if has_ff
+            else None
         )
         while not stop.is_set():
             try:
-                counts = sync_once(client, db)
-                log.info(
-                    "fuel prices synced: %d forecourt(s) updated, %d new price change(s)",
-                    counts["forecourts"],
-                    counts["prices"],
-                )
-            except FuelFinderError as e:
-                log.error("%s", e)
+                n = sync_uk_averages(http, db)
+                if n is not None:
+                    log.info("UK weekly average prices synced: %d row(s)", n)
             except (httpx.HTTPError, KeyError, ValueError) as e:
-                log.error("fuel price sync failed: %s: %s", e.__class__.__name__, e)
+                log.error("UK average price sync failed: %s: %s", e.__class__.__name__, e)
                 db._conn = None
+            if client is not None:
+                try:
+                    counts = sync_once(client, db)
+                    log.info(
+                        "fuel prices synced: %d forecourt(s) updated, %d new price change(s)",
+                        counts["forecourts"],
+                        counts["prices"],
+                    )
+                except FuelFinderError as e:
+                    log.error("%s", e)
+                except (httpx.HTTPError, KeyError, ValueError) as e:
+                    log.error("fuel price sync failed: %s: %s", e.__class__.__name__, e)
+                    db._conn = None
             stop.wait(interval)
     db.close()
     return 0
