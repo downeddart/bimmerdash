@@ -21,6 +21,8 @@ class Config:
     data_dir: Path
     mqtt_host: str = MQTT_HOST
     mqtt_port: int = MQTT_PORT
+    database_url: str | None = None
+    api_daily_budget: int = 45  # BMW allows 50 per 24 h; keep headroom for manual use
 
     @property
     def token_path(self) -> Path:
@@ -41,4 +43,6 @@ class Config:
             data_dir=Path(os.environ.get("BIMMERDASH_DATA_DIR", "./data")),
             mqtt_host=os.environ.get("BIMMERDASH_MQTT_HOST", MQTT_HOST),
             mqtt_port=int(os.environ.get("BIMMERDASH_MQTT_PORT", MQTT_PORT)),
+            database_url=os.environ.get("BIMMERDASH_DATABASE_URL") or None,
+            api_daily_budget=int(os.environ.get("BIMMERDASH_API_DAILY_BUDGET", 45)),
         )

@@ -11,6 +11,8 @@ requires-python = ">=3.12"
 dependencies = [
     "httpx>=0.27,<1",
     "paho-mqtt>=2.1,<3",
+    "pillow>=11,<12",
+    "psycopg[binary]>=3.2,<4",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +23,9 @@ bimmerdash = "bimmerdash.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+bimmerdash = ["migrations/*.sql"]
 
 [tool.ruff]
 line-length = 100

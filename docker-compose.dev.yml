@@ -1,0 +1,7 @@
+# Development: build the collector from source instead of pulling the published image.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# or set COMPOSE_FILE=docker-compose.yml:docker-compose.dev.yml in .env
+services:
+  collector:
+    build: ./collector
+    image: bimmerdash-collector:dev

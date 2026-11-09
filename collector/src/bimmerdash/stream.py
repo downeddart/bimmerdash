@@ -1,7 +1,8 @@
-"""Subscribe to the BMW CarData MQTT stream and append every message, untouched, to JSONL files.
+"""Subscribe to the BMW CarData MQTT stream and store every message.
 
-Raw storage comes first so nothing is lost: later processing (trips, fill-ups) can be
-re-run over the full history.
+Each message is appended untouched to a daily JSONL file first (the safety net), then written
+to the database. If the database is unavailable nothing is lost: `bimmerdash import-raw`
+replays the JSONL files.
 """
 
 from __future__ import annotations
@@ -10,16 +11,24 @@ import json
 import logging
 import signal
 import threading
-from datetime import UTC, datetime
+import time
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import httpx
 import paho.mqtt.client as mqtt
 
 from .auth import AuthError, TokenStore, refresh
+from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details
 from .config import Config
+from .db import Database
 
 log = logging.getLogger(__name__)
+
+KEEPALIVE_SECONDS = 30
+SUMMARY_EVERY = 600  # seconds between "received N messages" log lines
+DETAILS_MAX_AGE = timedelta(days=30)  # refresh vehicle basic data + image monthly
+DETAILS_RETRY = 6 * 3600  # after a failed fetch, wait before trying that VIN again
 
 
 class RawWriter:
@@ -65,15 +74,32 @@ def run_stream(cfg: Config) -> int:
         log.info("connected to %s, subscribing to %s", cfg.mqtt_host, _redact_topic(topic))
         client.subscribe(topic, qos=1)
 
-    def on_disconnect(_client, _userdata, _flags, reason_code, _props):
+    def on_disconnect(_client, _userdata, _flags, reason_code, props):
         if not stop.is_set():
-            log.warning("MQTT disconnected: %s (will reconnect)", reason_code)
+            reason = getattr(props, "ReasonString", None) if props else None
+            log.warning(
+                "MQTT disconnected: %s%s (will reconnect)",
+                reason_code,
+                f" ({reason})" if reason else "",
+            )
+
+    stats = {"messages": 0, "points": 0, "db_errors": 0}
+    ingest_db = Database(cfg.database_url) if cfg.database_url else None
 
     def on_message(_client, _userdata, msg):
         record = writer.write(msg.topic, msg.payload)
-        payload = record["payload"]
-        n = len(payload.get("data", {})) if isinstance(payload, dict) else 0
-        log.info("message: %d data point(s)", n)
+        stats["messages"] += 1
+        if ingest_db is None:
+            return
+        try:
+            stats["points"] += ingest_db.ingest(record)
+        except Exception as e:  # keep streaming; JSONL still has the message
+            stats["db_errors"] += 1
+            log.error("database write failed (%s); message kept in JSONL", e.__class__.__name__)
+            try:
+                ingest_db.conn.rollback()
+            except Exception:
+                ingest_db._conn = None
 
     client = mqtt.Client(
         callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -95,7 +121,33 @@ def run_stream(cfg: Config) -> int:
     if tokens.expires_soon():
         force_refresh.set()
 
-    client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=60)
+    main_db = Database(cfg.database_url) if cfg.database_url else None
+    if main_db is not None:
+        main_db.migrate()
+    api = (
+        CarDataApi(http, lambda: tokens.access_token, main_db, cfg.api_daily_budget)
+        if main_db is not None
+        else None
+    )
+    failed_at: dict[str, float] = {}
+    last_summary = time.monotonic()
+    last_details_check = 0.0  # check soon after start
+
+    def maybe_fetch_details() -> None:
+        """Basic data + image for new VINs, refreshed monthly. Runs on this (main) thread."""
+        for vin in main_db.vehicles_needing_details(DETAILS_MAX_AGE):
+            if time.monotonic() - failed_at.get(vin, -DETAILS_RETRY) < DETAILS_RETRY:
+                continue
+            if tokens.expires_soon(margin=120):
+                return  # wait for the refresh below
+            try:
+                fetch_vehicle_details(api, main_db, vin)
+            except (QuotaExceeded, httpx.HTTPError, ValueError) as e:
+                failed_at[vin] = time.monotonic()
+                log.warning("could not fetch vehicle details: %s", e)
+
+    # BMW's broker drops connections idle for 60 s, so ping well inside that.
+    client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=KEEPALIVE_SECONDS)
     client.loop_start()
     exit_code = 0
     try:
@@ -112,11 +164,32 @@ def run_stream(cfg: Config) -> int:
                     log.error("%s; retrying in 60s (run `bimmerdash login` if this persists)", e)
                     stop.wait(60)
                     continue
+            now = time.monotonic()
+            if api is not None and now - last_details_check > 60:
+                last_details_check = now
+                try:
+                    maybe_fetch_details()
+                except Exception as e:
+                    log.error("vehicle details check failed: %s", e)
+                    main_db._conn = None
+            if now - last_summary >= SUMMARY_EVERY:
+                log.info(
+                    "last %d min: %d message(s), %d data point(s) stored%s",
+                    SUMMARY_EVERY // 60,
+                    stats["messages"],
+                    stats["points"],
+                    f", {stats['db_errors']} database error(s)" if stats["db_errors"] else "",
+                )
+                stats.update(messages=0, points=0, db_errors=0)
+                last_summary = now
             stop.wait(30)
     finally:
         client.disconnect()
         client.loop_stop()
         http.close()
+        for d in (ingest_db, main_db):
+            if d is not None:
+                d.close()
     return exit_code
 
 

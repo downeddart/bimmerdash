@@ -1,12 +1,33 @@
 services:
+  db:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bimmerdash
+      POSTGRES_DB: bimmerdash
+      POSTGRES_PASSWORD: ${BIMMERDASH_DB_PASSWORD:?set BIMMERDASH_DB_PASSWORD in .env}
+      TIMESCALEDB_TELEMETRY: "off"
+    volumes:
+      - bimmerdash-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bimmerdash -d bimmerdash"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   collector:
-    build: ./collector
-    image: bimmerdash-collector:local
+    image: ghcr.io/downeddart/bimmerdash-collector:${BIMMERDASH_VERSION:-latest}
     restart: unless-stopped
     env_file: .env
+    environment:
+      BIMMERDASH_DATABASE_URL: postgresql://bimmerdash:${BIMMERDASH_DB_PASSWORD}@db:5432/bimmerdash
     volumes:
       - bimmerdash-data:/data
+    depends_on:
+      db:
+        condition: service_healthy
     command: ["stream"]
 
 volumes:
   bimmerdash-data:
+  bimmerdash-db:
