@@ -20,7 +20,7 @@ def db():
     with psycopg.connect(URL, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
     d = Database(URL)
-    assert d.migrate() == ["001_init"]
+    assert d.migrate() == ["001_init", "002_fuel_prices"]
     yield d
     d.close()
 
@@ -79,3 +79,29 @@ def test_vehicle_details_and_api_log(db):
     ]
     db.log_api_call("image", 200)
     assert db.api_calls_last_24h() == 1
+
+
+def test_fuel_prices_nearest_and_price_at(db):
+    from datetime import UTC, datetime
+
+    near = {
+        "node_id": "near",
+        "trading_name": "Near",
+        "location": {"latitude": 51.5000, "longitude": -0.1200, "postcode": "ZZ1 1ZZ"},
+    }
+    far = {**near, "node_id": "far", "location": {"latitude": 51.51, "longitude": -0.12}}
+    closed = {**near, "node_id": "closed", "permanent_closure": True}
+    assert db.upsert_forecourts([near, far, closed]) == 3
+    assert db.upsert_forecourts([near]) == 1  # update, no duplicate
+
+    hits = db.nearest_forecourts(51.5003, -0.1200, radius_m=150)
+    assert [h["node_id"] for h in hits] == ["near"]
+    assert 30 < hits[0]["distance_m"] < 40
+
+    t = lambda d, h: datetime(2026, 11, d, h, tzinfo=UTC)  # noqa: E731
+    rows = [("near", "E10", t(1, 7), 136.9), ("near", "E10", t(5, 7), 134.9)]
+    assert db.insert_fuel_prices(rows) == 2
+    assert db.insert_fuel_prices(rows) == 0  # replay is a no-op
+    assert db.price_at("near", "E10", t(4, 12)) == (136.9, t(1, 7))
+    assert db.price_at("near", "E10", t(9, 12))[0] == 134.9
+    assert db.price_at("near", "E10", t(1, 6)) is None

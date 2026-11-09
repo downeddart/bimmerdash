@@ -1,4 +1,4 @@
-"""Command line: bimmerdash {login,stream,keys,migrate,import-raw,fetch-vehicle}."""
+"""Command line: bimmerdash {login,stream,keys,migrate,import-raw,fetch-vehicle,prices}."""
 
 from __future__ import annotations
 
@@ -110,6 +110,29 @@ def cmd_fetch_vehicle(cfg: Config) -> int:
     return 0
 
 
+def cmd_prices(cfg: Config, once: bool) -> int:
+    from .fuelfinder import FuelFinderClient, FuelFinderError, run_prices, sync_once
+
+    if not once:
+        return run_prices(cfg)
+    if not (cfg.fuel_finder_client_id and cfg.fuel_finder_client_secret):
+        print("Error: set BIMMERDASH_FUEL_FINDER_CLIENT_ID and _SECRET in .env", file=sys.stderr)
+        return 2
+    db = _require_db(cfg)
+    if db is None:
+        return 2
+    db.migrate()
+    with httpx.Client(timeout=60) as http:
+        client = FuelFinderClient(http, cfg.fuel_finder_client_id, cfg.fuel_finder_client_secret)
+        try:
+            counts = sync_once(client, db)
+        except FuelFinderError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    print(f"{counts['forecourts']} forecourt(s) updated, {counts['prices']} new price change(s).")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="bimmerdash")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -120,6 +143,8 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("migrate", help="create/upgrade the database schema")
     sub.add_parser("import-raw", help="load recorded JSONL files into the database")
     sub.add_parser("fetch-vehicle", help="fetch vehicle details and image now (uses API quota)")
+    prices = sub.add_parser("prices", help="keep UK fuel price history in sync (Fuel Finder)")
+    prices.add_argument("--once", action="store_true", help="sync once and exit")
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -144,6 +169,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_import_raw(cfg)
     if args.command == "fetch-vehicle":
         return cmd_fetch_vehicle(cfg)
+    if args.command == "prices":
+        return cmd_prices(cfg, args.once)
     return cmd_keys(cfg, args.redact)
 
 

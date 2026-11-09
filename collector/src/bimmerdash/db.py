@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 from datetime import timedelta
 from importlib import resources
 
@@ -162,3 +163,87 @@ class Database:
             "INSERT INTO api_calls (endpoint, status) VALUES (%s, %s)", (endpoint, status)
         )
         self.conn.commit()
+
+    # --- fuel prices (UK Fuel Finder) -------------------------------------------
+
+    def fuel_finder_state(self) -> dict:
+        row = self.conn.execute(
+            "SELECT forecourts_at, full_prices_at, incremental_at FROM fuel_finder_state"
+        ).fetchone()
+        self.conn.commit()
+        return {"forecourts_at": row[0], "full_prices_at": row[1], "incremental_at": row[2]}
+
+    def set_fuel_finder_state(self, **fields) -> None:
+        allowed = {"forecourts_at", "full_prices_at", "incremental_at"}
+        assert set(fields) <= allowed
+        sets = ", ".join(f"{k} = %s" for k in fields)
+        self.conn.execute(f"UPDATE fuel_finder_state SET {sets}", tuple(fields.values()))
+        self.conn.commit()
+
+    def upsert_forecourts(self, page: list[dict]) -> int:
+        from .fuelfinder import forecourt_row
+
+        rows = [(*forecourt_row(d), Jsonb(d)) for d in page if d.get("node_id")]
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO forecourts (node_id, trading_name, brand_name, postcode, latitude,"
+                " longitude, is_motorway, is_supermarket, closed, fuel_types, raw)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+                " ON CONFLICT (node_id) DO UPDATE SET trading_name = EXCLUDED.trading_name,"
+                " brand_name = EXCLUDED.brand_name, postcode = EXCLUDED.postcode,"
+                " latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude,"
+                " is_motorway = EXCLUDED.is_motorway, is_supermarket = EXCLUDED.is_supermarket,"
+                " closed = EXCLUDED.closed, fuel_types = EXCLUDED.fuel_types,"
+                " raw = EXCLUDED.raw, updated_at = now()",
+                rows,
+            )
+        self.conn.commit()
+        return len(rows)
+
+    def insert_fuel_prices(self, rows: list[tuple]) -> int:
+        """(node_id, fuel_type, effective_at, price) rows; returns how many were new."""
+        if not rows:
+            return 0
+        with self.conn.cursor() as cur:
+            cur.executemany(
+                "INSERT INTO fuel_prices (node_id, fuel_type, effective_at, price)"
+                " VALUES (%s, %s, %s, %s) ON CONFLICT DO NOTHING",
+                rows,
+            )
+            new = cur.rowcount
+        self.conn.commit()
+        return max(new, 0)
+
+    def nearest_forecourts(
+        self, lat: float, lon: float, radius_m: float = 150, limit: int = 3
+    ) -> list[dict]:
+        """Open forecourts within radius_m, closest first (equirectangular distance)."""
+        dlat = radius_m / 111_320
+        dlon = dlat / max(0.2, abs(math.cos(math.radians(lat))))
+        rows = self.conn.execute(
+            """
+            SELECT node_id, trading_name, brand_name, postcode, latitude, longitude,
+                   6371000 * sqrt(power(radians(latitude - %(lat)s), 2)
+                     + power(radians(longitude - %(lon)s) * cos(radians(%(lat)s)), 2)) AS dist
+            FROM forecourts
+            WHERE NOT closed
+              AND latitude BETWEEN %(lat)s - %(dlat)s AND %(lat)s + %(dlat)s
+              AND longitude BETWEEN %(lon)s - %(dlon)s AND %(lon)s + %(dlon)s
+            ORDER BY dist LIMIT %(limit)s
+            """,
+            {"lat": lat, "lon": lon, "dlat": dlat, "dlon": dlon, "limit": limit},
+        ).fetchall()
+        self.conn.commit()
+        cols = ["node_id", "trading_name", "brand_name", "postcode", "lat", "lon", "distance_m"]
+        return [dict(zip(cols, r, strict=True)) for r in rows if r[6] <= radius_m]
+
+    def price_at(self, node_id: str, fuel_type: str, at) -> tuple[float, object] | None:
+        """The price in force at `at`: (pence per litre, when it took effect)."""
+        row = self.conn.execute(
+            "SELECT price, effective_at FROM fuel_prices"
+            " WHERE node_id = %s AND fuel_type = %s AND effective_at <= %s"
+            " ORDER BY effective_at DESC LIMIT 1",
+            (node_id, fuel_type, at),
+        ).fetchone()
+        self.conn.commit()
+        return (row[0], row[1]) if row else None

@@ -23,6 +23,8 @@ class Config:
     mqtt_port: int = MQTT_PORT
     database_url: str | None = None
     api_daily_budget: int = 45  # BMW allows 50 per 24 h; keep headroom for manual use
+    fuel_finder_client_id: str | None = None
+    fuel_finder_client_secret: str | None = None
 
     @property
     def token_path(self) -> Path:
@@ -45,4 +47,7 @@ class Config:
             mqtt_port=int(os.environ.get("BIMMERDASH_MQTT_PORT", MQTT_PORT)),
             database_url=os.environ.get("BIMMERDASH_DATABASE_URL") or None,
             api_daily_budget=int(os.environ.get("BIMMERDASH_API_DAILY_BUDGET", 45)),
+            fuel_finder_client_id=os.environ.get("BIMMERDASH_FUEL_FINDER_CLIENT_ID") or None,
+            fuel_finder_client_secret=os.environ.get("BIMMERDASH_FUEL_FINDER_CLIENT_SECRET")
+            or None,
         )

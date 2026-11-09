@@ -9,3 +9,6 @@ services:
   web:
     build: ./web
     image: bimmerdash-web:dev
+
+  prices:
+    image: bimmerdash-collector:dev

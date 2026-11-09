@@ -28,6 +28,18 @@ services:
         condition: service_healthy
     command: ["stream"]
 
+  prices:
+    # UK fuel price history from the Fuel Finder open data scheme (optional).
+    image: ghcr.io/downeddart/bimmerdash-collector:${BIMMERDASH_VERSION:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      BIMMERDASH_DATABASE_URL: postgresql://bimmerdash:${BIMMERDASH_DB_PASSWORD}@db:5432/bimmerdash
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["prices"]
+
   web:
     image: ghcr.io/downeddart/bimmerdash-web:${BIMMERDASH_VERSION:-latest}
     restart: unless-stopped
