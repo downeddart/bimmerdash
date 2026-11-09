@@ -19,3 +19,8 @@ __pycache__/
 .ruff_cache/
 build/
 dist/
+
+# Frontend
+node_modules/
+web/frontend/dist/
+web/src/bimmerdash_web/static/

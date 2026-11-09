@@ -5,3 +5,7 @@ services:
   collector:
     build: ./collector
     image: bimmerdash-collector:dev
+
+  web:
+    build: ./web
+    image: bimmerdash-web:dev

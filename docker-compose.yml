@@ -28,6 +28,19 @@ services:
         condition: service_healthy
     command: ["stream"]
 
+  web:
+    image: ghcr.io/downeddart/bimmerdash-web:${BIMMERDASH_VERSION:-latest}
+    restart: unless-stopped
+    environment:
+      BIMMERDASH_DATABASE_URL: postgresql://bimmerdash:${BIMMERDASH_DB_PASSWORD}@db:5432/bimmerdash
+      BIMMERDASH_LOG_LEVEL: ${BIMMERDASH_LOG_LEVEL:-INFO}
+    ports:
+      # No login yet: keep this on your LAN or behind a reverse proxy with auth.
+      - "${BIMMERDASH_WEB_PORT:-8320}:8320"
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   bimmerdash-data:
   bimmerdash-db:

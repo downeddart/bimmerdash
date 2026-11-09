@@ -1,0 +1,137 @@
+<script>
+  import { onMount } from 'svelte';
+  import { api } from './lib/api.js';
+  import { ago } from './lib/format.js';
+  import Overview from './pages/Overview.svelte';
+  import Data from './pages/Data.svelte';
+  import Placeholder from './pages/Placeholder.svelte';
+
+  const routes = {
+    '/': { label: 'Overview', icon: 'grid' },
+    '/trips': { label: 'Trips', icon: 'route' },
+    '/fuel': { label: 'Fuel', icon: 'fuel' },
+    '/data': { label: 'Data', icon: 'list' },
+  };
+
+  let path = $state(currentPath());
+  let vehicles = $state(null);
+  let error = $state(null);
+  let status = $state(null);
+  let vehicle = $derived(vehicles?.[0] ?? null);
+  let streamAge = $derived(
+    status?.last_message_at ? (Date.now() - new Date(status.last_message_at)) / 1000 : Infinity
+  );
+
+  function currentPath() {
+    const p = location.hash.replace(/^#/, '') || '/';
+    return p in routes ? p : '/';
+  }
+
+  async function loadStatus() {
+    try {
+      status = await api.status();
+    } catch {
+      status = null;
+    }
+  }
+
+  onMount(() => {
+    const onHash = () => (path = currentPath());
+    window.addEventListener('hashchange', onHash);
+    api.vehicles().then((v) => (vehicles = v)).catch((e) => (error = e.message));
+    loadStatus();
+    const t = setInterval(loadStatus, 60_000);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      clearInterval(t);
+    };
+  });
+</script>
+
+<div class="shell">
+  <nav aria-label="Main">
+    <a class="brand" href="#/">
+      <span class="logo" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="2.4" stroke-linecap="round"><path d="M4 15a8 8 0 0 1 16 0" /><path d="M12 15l4-5" /></svg>
+      </span>
+      bimmerdash
+    </a>
+    <div class="links">
+      {#each Object.entries(routes) as [href, r]}
+        <a href={'#' + href} class:active={path === href} aria-current={path === href ? 'page' : undefined}>
+          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            {#if r.icon === 'grid'}
+              <rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" />
+            {:else if r.icon === 'route'}
+              <circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="5" r="2.5" /><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5" />
+            {:else if r.icon === 'fuel'}
+              <path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13" /><path d="M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3" /><path d="M7 8h5" />
+            {:else}
+              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+            {/if}
+          </svg>
+          {r.label}
+        </a>
+      {/each}
+    </div>
+    <div class="stream">
+      <div class="row">
+        <span class="dot" style:background={streamAge < 3600 ? 'var(--ok)' : streamAge < 86400 ? 'var(--warn)' : '#6b7280'}></span>
+        {streamAge < 3600 ? 'Stream active' : status?.last_message_at ? 'Stream quiet' : 'No data yet'}
+      </div>
+      <div class="small muted">Last message {ago(status?.last_message_at)}</div>
+      {#if status}<div class="small muted">API calls today: {status.api_calls_24h} / 50</div>{/if}
+    </div>
+  </nav>
+
+  <main>
+    {#if error}
+      <div class="card">Could not reach the bimmerdash API: {error}</div>
+    {:else if vehicles === null}
+      <div class="muted">Loading…</div>
+    {:else if !vehicle}
+      <div class="card">
+        <h2>No car yet</h2>
+        <p class="muted">Data appears once the collector receives its first message. Locking the car from the MyBMW app is a quick way to trigger one.</p>
+      </div>
+    {:else if path === '/'}
+      <Overview {vehicle} />
+    {:else if path === '/data'}
+      <Data {vehicle} />
+    {:else if path === '/trips'}
+      <Placeholder title="Trips" text="Trip detection is being built from your first days of driving data. Each trip will show its route, distance, duration and fuel used." />
+    {:else}
+      <Placeholder title="Fuel" text="Fill-up detection and fuel cost tracking are next. Economy per tank, monthly spend and local prices will appear here." />
+    {/if}
+  </main>
+</div>
+
+<style>
+  .shell { min-height: 100vh; display: flex; flex-wrap: wrap; }
+  nav {
+    flex: 1 1 232px;
+    max-width: 100%;
+    padding: 28px 20px;
+    border-right: 1px solid var(--line);
+    background: var(--nav);
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+  .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; color: var(--text); font-family: var(--display); font-weight: 600; font-size: 19px; }
+  .logo { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .links { display: flex; flex-direction: column; gap: 4px; }
+  .links a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: var(--muted); font-weight: 500; min-height: 44px; }
+  .links a:hover { color: var(--text); }
+  .links a.active { background: var(--card-2); color: var(--text); }
+  .stream { margin-top: auto; padding: 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+  .row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
+  main { flex: 999 1 560px; min-width: 0; padding: 32px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 24px; }
+
+  @media (max-width: 820px) {
+    nav { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; gap: 14px; }
+    .links { flex-direction: row; overflow-x: auto; }
+    .links a { flex: none; }
+    .stream { display: none; }
+  }
+</style>

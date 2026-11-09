@@ -5,8 +5,8 @@ streaming API. In the spirit of TeslaMate / RiviAmigo, but for BMWs, including
 combustion cars.
 
 > **Status: early.** bimmerdash signs in to BMW, records the CarData stream into
-> TimescaleDB and fetches your car's details and picture. Trip/fill-up detection, fuel cost
-> analytics and the web UI are in progress.
+> TimescaleDB, fetches your car's details and picture, and shows them in a dark web UI.
+> Trip/fill-up detection and fuel cost analytics are in progress.
 
 Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 
@@ -20,7 +20,8 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - [ ] Trips, fill-ups and fuel economy
 - [ ] Fuel cost via the UK Fuel Finder price data
 - [ ] Mileage and usage analytics (annual projection, when/where you drive)
-- [ ] Web UI (dark, mobile-friendly)
+- [x] Web UI: overview with your car's picture, raw data explorer (dark, mobile-friendly)
+- [ ] Web UI: trips, fuel and insights pages
 - [ ] Pushover alerts (left unlocked, low fuel, service due, stream silent)
 
 ## Quick start
@@ -43,13 +44,16 @@ Requires Docker with Compose, and a BMW account in a market that offers CarData.
    docker compose up -d
    docker compose logs -f collector
    ```
+   The web UI is at `http://<your-server>:8320` (change with `BIMMERDASH_WEB_PORT`).
+   It has no login yet: keep it on your home network or behind a reverse proxy with auth.
 5. After some driving, see what your car reports:
    ```sh
    docker compose run --rm collector keys
    docker compose run --rm collector keys --redact   # values hidden, safe to share in issues
    ```
 
-Images are published to `ghcr.io/downeddart/bimmerdash-collector` (amd64 and arm64).
+Images are published to `ghcr.io/downeddart/bimmerdash-collector` and
+`ghcr.io/downeddart/bimmerdash-web` (amd64 and arm64).
 Pin a version with `BIMMERDASH_VERSION` in `.env`.
 
 ### Other commands
@@ -75,6 +79,9 @@ python3 -m venv .venv && . .venv/bin/activate
 pip install -e ".[dev]"
 pytest && ruff check .
 ```
+
+Frontend (Svelte 5 + Vite) lives in `web/frontend`; `npm run dev` proxies `/api` to a
+running bimmerdash-web on port 8320.
 
 Database tests run when `BIMMERDASH_TEST_DATABASE_URL` points at a disposable TimescaleDB.
 To run the stack from source, use the dev override:
