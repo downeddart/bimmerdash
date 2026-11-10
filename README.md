@@ -22,6 +22,7 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - [ ] Mileage and usage analytics (annual projection, when/where you drive)
 - [x] Web UI: overview with your car's picture, raw data explorer (dark, mobile-friendly)
 - [x] Web UI: trips and fuel pages, with maps
+- [x] Login (single account, first-run setup, password reset command)
 - [x] Settings: miles or km, mpg or L/100 km, fuel grade (E10, E5, diesel)
 - [ ] Web UI: insights page
 - [ ] Pushover alerts (left unlocked, low fuel, service due, stream silent)
@@ -83,6 +84,24 @@ Everything is recalculated from the stored data, so improvements apply to past t
 For maps, your browser loads tiles from OpenStreetMap.
 
 BMW allows 50 CarData API calls per day. bimmerdash logs every call and stops at 45.
+
+## Signing in
+
+The web UI asks for a login. The first time you open it, it shows **Create your account**:
+do that straight away, because until an account exists anyone who can reach the page can
+create one. Or create it from the command line before opening the page:
+
+```sh
+docker compose exec web bimmerdash-web set-password <username>
+```
+
+The same command resets a forgotten password (and signs that account out everywhere).
+Passwords are stored as scrypt hashes; sessions last 30 days. Repeated failed logins from
+one address are blocked for 15 minutes.
+
+If bimmerdash sits behind something that already requires a login (Authelia, Authentik,
+Cloudflare Access...), you can set `BIMMERDASH_AUTH=off`. Don't turn it off otherwise:
+there is no other protection.
 
 ## Privacy
 

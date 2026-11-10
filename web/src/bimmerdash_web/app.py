@@ -7,12 +7,13 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Response
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
+from starlette.concurrency import run_in_threadpool
 
-from . import derived, queries, settings
+from . import auth, derived, queries, settings
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
@@ -28,7 +29,108 @@ def create_app(database_url: str | None = None) -> FastAPI:
         yield
         pool.close()
 
-    app = FastAPI(title="bimmerdash", lifespan=lifespan, docs_url="/api/docs", redoc_url=None)
+    app = FastAPI(
+        title="bimmerdash",
+        lifespan=lifespan,
+        docs_url="/api/docs",
+        openapi_url="/api/openapi.json",
+        redoc_url=None,
+    )
+    limiter = auth.RateLimiter()
+
+    def current_user(token: str | None) -> str | None:
+        with pool.connection() as conn:
+            return auth.session_user(conn, token) if auth.ready(conn) else None
+
+    @app.middleware("http")
+    async def require_login(request: Request, call_next):
+        path = request.url.path
+        if not auth.enabled() or not path.startswith("/api/") or path in auth.PUBLIC_API:
+            return await call_next(request)
+        user = await run_in_threadpool(current_user, request.cookies.get(auth.COOKIE))
+        if user is None:
+            return JSONResponse({"detail": "login required"}, status_code=401)
+        request.state.user = user
+        return await call_next(request)
+
+    def set_cookie(request: Request, response: Response, token: str) -> None:
+        response.set_cookie(
+            auth.COOKIE,
+            token,
+            max_age=auth.SESSION_DAYS * 86400,
+            httponly=True,
+            samesite="lax",
+            secure=request.url.scheme == "https",
+            path="/",
+        )
+
+    @app.get("/api/auth/state")
+    def auth_state(request: Request):
+        if not auth.enabled():
+            return {"enabled": False, "setup_required": False, "user": None}
+        with pool.connection() as conn:
+            if not auth.ready(conn):
+                raise HTTPException(503, "database not ready; is the collector up to date?")
+            return {
+                "enabled": True,
+                "setup_required": not auth.has_users(conn),
+                "user": auth.session_user(conn, request.cookies.get(auth.COOKIE)),
+            }
+
+    @app.post("/api/auth/setup")
+    def auth_setup(body: auth.NewAccount, request: Request, response: Response):
+        """Create the first account. Only works while there are no accounts."""
+        if not auth.enabled():
+            raise HTTPException(404)
+        with pool.connection() as conn, conn.transaction():
+            conn.execute("LOCK TABLE web_users IN EXCLUSIVE MODE")
+            if auth.has_users(conn):
+                raise HTTPException(409, "an account already exists")
+            auth.create_user(conn, body.username, body.password)
+            token = auth.new_session(conn, body.username, request.headers.get("user-agent"))
+        set_cookie(request, response, token)
+        return {"user": body.username}
+
+    @app.post("/api/auth/login")
+    def auth_login(body: auth.Credentials, request: Request, response: Response):
+        if not auth.enabled():
+            raise HTTPException(404)
+        client = request.client.host if request.client else "unknown"
+        wait = limiter.blocked(client)
+        if wait:
+            raise HTTPException(
+                429,
+                "too many failed attempts; try again later",
+                headers={"Retry-After": str(int(wait) + 1)},
+            )
+        with pool.connection() as conn:
+            if not auth.check_login(conn, body.username, body.password):
+                limiter.failed(client)
+                raise HTTPException(401, "wrong username or password")
+            limiter.reset(client)
+            token = auth.new_session(conn, body.username, request.headers.get("user-agent"))
+        set_cookie(request, response, token)
+        return {"user": body.username}
+
+    @app.post("/api/auth/logout")
+    def auth_logout(request: Request, response: Response):
+        with pool.connection() as conn:
+            auth.end_session(conn, request.cookies.get(auth.COOKIE))
+        response.delete_cookie(auth.COOKIE, path="/")
+        return {"ok": True}
+
+    @app.post("/api/auth/password")
+    def auth_password(body: auth.PasswordChange, request: Request, response: Response):
+        user = getattr(request.state, "user", None)
+        if not auth.enabled() or user is None:
+            raise HTTPException(404)
+        with pool.connection() as conn:
+            if not auth.check_login(conn, user, body.current):
+                raise HTTPException(403, "current password is wrong")
+            auth.create_user(conn, user, body.new)  # also signs out other sessions
+            token = auth.new_session(conn, user, request.headers.get("user-agent"))
+        set_cookie(request, response, token)
+        return {"user": user}
 
     def vin_or_404(vin: str) -> str:
         if not VIN_RE.match(vin):
@@ -127,7 +229,18 @@ def create_app(database_url: str | None = None) -> FastAPI:
     return app
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser(prog="bimmerdash-web")
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("serve", help="run the web UI (default)")
+    pw = sub.add_parser("set-password", help="create an account or reset its password")
+    pw.add_argument("username")
+    args = parser.parse_args(argv)
+    if args.command == "set-password":
+        return set_password(args.username)
+
     import uvicorn
 
     uvicorn.run(
@@ -138,3 +251,36 @@ def main() -> None:
         proxy_headers=True,
         log_level=os.environ.get("BIMMERDASH_LOG_LEVEL", "info").lower(),
     )
+    return 0
+
+
+def set_password(username: str) -> int:
+    import getpass
+    import sys
+
+    import psycopg
+
+    try:
+        auth.Credentials(username=username, password="x")
+    except ValueError:
+        print("Usernames may use letters, digits and . _ @ -", file=sys.stderr)
+        return 2
+    if sys.stdin.isatty():
+        password = getpass.getpass("New password: ")
+        if getpass.getpass("Repeat it: ") != password:
+            print("Passwords don't match.", file=sys.stderr)
+            return 1
+    else:
+        password = sys.stdin.readline().rstrip("\n")
+    if len(password) < auth.MIN_PASSWORD:
+        print(f"Use at least {auth.MIN_PASSWORD} characters.", file=sys.stderr)
+        return 1
+    with psycopg.connect(os.environ["BIMMERDASH_DATABASE_URL"], autocommit=True) as conn:
+        if not auth.ready(conn):
+            print(
+                "Database not ready: start the collector once so it can migrate.", file=sys.stderr
+            )
+            return 1
+        auth.create_user(conn, username, password)
+    print(f"Password set for {username}. Their other sessions were signed out.")
+    return 0

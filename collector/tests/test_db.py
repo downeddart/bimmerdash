@@ -26,6 +26,7 @@ def db():
         "003_uk_average_prices",
         "004_trips_fillups",
         "005_settings",
+        "006_web_auth",
     ]
     yield d
     d.close()

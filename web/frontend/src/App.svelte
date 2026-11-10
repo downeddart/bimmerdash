@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
-  import { api } from './lib/api.js';
+  import { api, UNAUTHORISED } from './lib/api.js';
+  import Login from './pages/Login.svelte';
   import { ago, shortDate } from './lib/format.js';
   import Overview from './pages/Overview.svelte';
   import Data from './pages/Data.svelte';
@@ -21,6 +22,9 @@
   let vehicles = $state(null);
   let error = $state(null);
   let status = $state(null);
+  let authInfo = $state(null); // { enabled, setup_required, user }
+  let authError = $state(null);
+  const signedIn = $derived(authInfo && (!authInfo.enabled || authInfo.user));
   let vehicle = $derived(vehicles?.[0] ?? null);
   let streamAge = $derived(
     status?.last_message_at ? (Date.now() - new Date(status.last_message_at)) / 1000 : Infinity
@@ -57,20 +61,43 @@
     }
   }
 
-  onMount(() => {
-    const onHash = () => (path = currentPath());
-    window.addEventListener('hashchange', onHash);
+  async function checkAuth() {
+    try {
+      authInfo = await api.authState();
+      authError = null;
+    } catch (e) {
+      authError = e.message;
+    }
+    if (signedIn) loadApp();
+  }
+
+  function loadApp() {
+    error = null;
     api.vehicles().then((v) => (vehicles = v)).catch((e) => (error = e.message));
     loadStatus();
     loadSettings().catch(() => {});
-    const t = setInterval(loadStatus, 60_000);
+  }
+
+  onMount(() => {
+    const onHash = () => (path = currentPath());
+    const onUnauthorised = () => authInfo && (authInfo = { ...authInfo, user: null });
+    window.addEventListener('hashchange', onHash);
+    window.addEventListener(UNAUTHORISED, onUnauthorised);
+    checkAuth();
+    const t = setInterval(() => signedIn && loadStatus(), 60_000);
     return () => {
       window.removeEventListener('hashchange', onHash);
+      window.removeEventListener(UNAUTHORISED, onUnauthorised);
       clearInterval(t);
     };
   });
 </script>
 
+{#if !authInfo}
+  <div class="gate muted">{authError ? `Could not reach bimmerdash: ${authError}` : 'Loading…'}</div>
+{:else if !signedIn}
+  <Login setup={authInfo.setup_required} onDone={checkAuth} />
+{:else}
 <div class="shell">
   <nav aria-label="Main">
     <a class="brand" href="#/">
@@ -120,7 +147,7 @@
 
   <main>
     {#if path === '/settings'}
-      <Settings {vehicle} />
+      <Settings {vehicle} account={authInfo} onSignedOut={checkAuth} />
     {:else if error}
       <div class="card">Could not reach the bimmerdash API: {error}</div>
     {:else if vehicles === null}
@@ -141,8 +168,10 @@
     {/if}
   </main>
 </div>
+{/if}
 
 <style>
+  .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
   .shell { min-height: 100vh; display: flex; flex-wrap: wrap; }
   nav {
     flex: 1 1 232px;
