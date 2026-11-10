@@ -36,10 +36,15 @@ def trips(conn: psycopg.Connection, vin: str, limit: int = 200) -> dict:
             (vin, limit),
         )
     )
+    from .usage import place_at, places
+
+    named = places(conn)
     for r in rows:
         r["minutes"] = round((r["end_time"] - r["start_time"]).total_seconds() / 60)
         r["start"] = _point(r.pop("start_lat"), r.pop("start_lon"))
         r["end"] = _point(r.pop("end_lat"), r.pop("end_lon"))
+        r["start_place"] = place_at(named, *(_coords(r["start"])))
+        r["end_place"] = place_at(named, *(_coords(r["end"])))
         r["route"] = [{"time": t, "lat": la, "lon": lo} for t, la, lo in (r["route"] or [])]
         r["economy_l100"] = _l100(r["fuel_used_l"], r["distance_km"])
     return {"summary": trip_summary(conn, vin), "trips": rows}
@@ -285,6 +290,10 @@ def tidy_name(name: str | None) -> str | None:
             w if i and w in small else w[:1].upper() + w[1:] for i, w in enumerate(words)
         )
     return name
+
+
+def _coords(p: dict | None) -> tuple:
+    return (p["lat"], p["lon"]) if p else (None, None)
 
 
 def _point(lat, lon) -> dict | None:

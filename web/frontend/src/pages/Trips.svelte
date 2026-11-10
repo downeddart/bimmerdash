@@ -31,6 +31,12 @@
     trip && trip.minutes > 0 ? (trip.distance_km / trip.minutes) * 60 : null
   );
 
+  // "Home → Work" when either end is a named place.
+  function route(t) {
+    if (!t.start_place && !t.end_place) return '';
+    return `${t.start_place?.name ?? 'Elsewhere'} → ${t.end_place?.name ?? 'elsewhere'}`;
+  }
+
   function km(v) {
     const d = toUnit(v, prefs.distance);
     return d == null ? DASH : d < 1 ? '< 1' : num(d, d < 10 ? 1 : 0);
@@ -75,7 +81,7 @@
       <div class="card list" role="list">
         {#each trips as t, i}
           <button class="row" class:active={i === selected} onclick={() => (selected = i)} role="listitem" aria-current={i === selected}>
-            <span class="when">{dateTime(t.start_time)}</span>
+            <span class="when">{dateTime(t.start_time)}{#if route(t)}<span class="route small muted">{route(t)}</span>{/if}</span>
             <span class="km num">{km(t.distance_km)} {unit}</span>
             <span class="small muted">{duration(t.minutes)}{t.fuel_used_l != null ? ` · ${num(t.fuel_used_l)} L` : ''}</span>
           </button>
@@ -86,8 +92,8 @@
         <div class="card detail">
           <div class="card-head">
             <div>
-              <h2>{dateTime(trip.start_time)}</h2>
-              <div class="small muted">{time(trip.start_time)} – {time(trip.end_time)}</div>
+              <h2>{route(trip) || dateTime(trip.start_time)}</h2>
+              <div class="small muted">{route(trip) ? `${dateTime(trip.start_time)}, ` : ''}{time(trip.start_time)} – {time(trip.end_time)}</div>
             </div>
           </div>
           {#if markers.length}
@@ -124,7 +130,8 @@
   .row:hover { background: var(--card-2); }
   .row.active { background: var(--card-3); }
   .row:focus-visible { outline: 2px solid var(--accent); }
-  .when { font-weight: 500; }
+  .when { font-weight: 500; display: flex; flex-direction: column; gap: 2px; }
+  .route { font-weight: 400; }
   .km { text-align: right; }
   .detail { display: flex; flex-direction: column; gap: 16px; }
   .card-head { display: flex; justify-content: space-between; gap: 12px; }

@@ -8,12 +8,14 @@
   import Trips from './pages/Trips.svelte';
   import Fuel from './pages/Fuel.svelte';
   import Settings from './pages/Settings.svelte';
+  import Insights from './pages/Insights.svelte';
   import { loadSettings } from './lib/prefs.svelte.js';
 
   const routes = {
     '/': { label: 'Overview', icon: 'grid' },
     '/trips': { label: 'Trips', icon: 'route' },
     '/fuel': { label: 'Fuel', icon: 'fuel' },
+    '/insights': { label: 'Insights', icon: 'chart' },
     '/data': { label: 'Data', icon: 'list' },
     '/settings': { label: 'Settings', icon: 'gear' },
   };
@@ -116,6 +118,8 @@
               <circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="5" r="2.5" /><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5" />
             {:else if r.icon === 'fuel'}
               <path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13" /><path d="M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3" /><path d="M7 8h5" />
+            {:else if r.icon === 'chart'}
+              <path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" />
             {:else if r.icon === 'gear'}
               <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
             {:else}
@@ -161,6 +165,8 @@
       <Overview {vehicle} />
     {:else if path === '/data'}
       <Data {vehicle} />
+    {:else if path === '/insights'}
+      <Insights {vehicle} />
     {:else if path === '/trips'}
       <Trips {vehicle} />
     {:else}
@@ -172,7 +178,7 @@
 
 <style>
   .gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .shell { min-height: 100vh; display: flex; flex-wrap: wrap; }
+  .shell { min-height: 100vh; display: flex; flex-wrap: wrap; align-content: flex-start; }
   nav {
     flex: 1 1 232px;
     max-width: 100%;

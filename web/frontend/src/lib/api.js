@@ -31,6 +31,7 @@ async function request(method, path, body) {
 const get = (path) => request('GET', path);
 const put = (path, body) => request('PUT', path, body);
 const post = (path, body = {}) => request('POST', path, body);
+const del = (path) => request('DELETE', path);
 
 export const api = {
   vehicles: () => get('/vehicles'),
@@ -41,6 +42,11 @@ export const api = {
   trips: (vin) => get(`/vehicles/${vin}/trips`),
   fuel: (vin) => get(`/vehicles/${vin}/fuel`),
   nearby: (vin, km = 5) => get(`/vehicles/${vin}/fuel/nearby?radius_km=${km}`),
+  usage: (vin) => get(`/vehicles/${vin}/usage`),
+  places: () => get('/places'),
+  addPlace: (place) => post('/places', place),
+  renamePlace: (id, name) => put(`/places/${id}`, { name }),
+  deletePlace: (id) => del(`/places/${id}`),
   settings: () => get('/settings'),
   putSettings: (body) => put('/settings', body),
   putVehicleSettings: (vin, body) => put(`/vehicles/${vin}/settings`, body),

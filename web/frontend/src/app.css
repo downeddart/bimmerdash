@@ -50,7 +50,7 @@ h2 { font-size: 16px; font-weight: 600; }
 .muted { color: var(--muted); }
 .small { font-size: 12px; }
 .num { font-family: var(--display); font-weight: 600; }
-.unit { font-size: 0.55em; color: var(--muted); font-weight: 500; }
+.unit { font-size: 0.55em; color: var(--muted); font-weight: 500; white-space: nowrap; }
 
 .grid {
   display: grid;
