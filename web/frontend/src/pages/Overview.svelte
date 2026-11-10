@@ -1,7 +1,8 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { ago, num, title, shortDate, DASH } from '../lib/format.js';
+  import { ago, num, title, shortDate, DASH, dist, distUnit, measure } from '../lib/format.js';
+  import { prefs } from '../lib/prefs.svelte.js';
 
   let { vehicle } = $props();
   let o = $state(null);
@@ -84,8 +85,8 @@
       </div>
       <div class="hero-stats">
         <div><span class="small muted">Fuel</span><span class="num" style:color="var(--fuel)">{o.fuel_percent != null ? `${num(o.fuel_percent)}%` : DASH}</span></div>
-        <div><span class="small muted">Range</span><span class="num">{o.range ? `${num(o.range.value)} ${o.range.unit ?? 'km'}` : DASH}</span></div>
-        <div><span class="small muted">Odometer</span><span class="num">{o.odometer ? `${num(o.odometer.value)} ${o.odometer.unit ?? 'km'}` : DASH}</span></div>
+        <div><span class="small muted">Range</span><span class="num">{measure(o.range, prefs.distance)}</span></div>
+        <div><span class="small muted">Odometer</span><span class="num">{measure(o.odometer, prefs.distance)}</span></div>
       </div>
     </div>
   </section>
@@ -102,7 +103,7 @@
         <div class="ring-label"><span class="num big">{o.fuel_percent != null ? `${num(o.fuel_percent)}%` : DASH}</span><span class="small muted">fuel</span></div>
       </div>
       <div class="fuel-facts">
-        <div><span class="muted">Range</span><span class="num mid">{o.range ? num(o.range.value) : DASH} <span class="unit">{o.range?.unit ?? 'km'}</span></span></div>
+        <div><span class="muted">Range</span><span class="num mid">{o.range ? dist(o.range.value, prefs.distance) : DASH} <span class="unit">{distUnit(prefs.distance)}</span></span></div>
         <div><span class="muted">In the tank</span><span class="num mid">{o.fuel_litres ? num(o.fuel_litres.value, 1) : DASH} <span class="unit">{o.fuel_litres?.unit ?? 'L'}</span></span></div>
       </div>
     </div>
@@ -120,20 +121,20 @@
   </section>
 
   <section class="grid" aria-label="Key stats">
-    <div class="card tile"><span class="muted">This week</span><span class="num tile-v">{thisWeek != null ? `${num(thisWeek)} km` : DASH}</span><span class="small muted">from odometer</span></div>
-    <div class="card tile"><span class="muted">Next service</span><span class="num tile-v">{o.service_distance ? `${num(o.service_distance.value)} ${o.service_distance.unit ?? 'km'}` : DASH}</span><span class="small muted">distance remaining</span></div>
-    <div class="card tile"><span class="muted">Odometer</span><span class="num tile-v">{o.odometer ? num(o.odometer.value) : DASH}</span><span class="small muted">{o.odometer?.unit ?? 'km'}</span></div>
+    <div class="card tile"><span class="muted">This week</span><span class="num tile-v">{thisWeek != null ? `${dist(thisWeek, prefs.distance)} ${distUnit(prefs.distance)}` : DASH}</span><span class="small muted">from odometer</span></div>
+    <div class="card tile"><span class="muted">Next service</span><span class="num tile-v">{measure(o.service_distance, prefs.distance)}</span><span class="small muted">distance remaining</span></div>
+    <div class="card tile"><span class="muted">Odometer</span><span class="num tile-v">{o.odometer ? dist(o.odometer.value, prefs.distance) : DASH}</span><span class="small muted">{distUnit(prefs.distance)}</span></div>
     <div class="card tile"><span class="muted">Status</span><span class="num tile-v">{o.is_moving ? 'Moving' : 'Parked'}</span><span class="small muted">updated {ago(o.updated_at)}</span></div>
   </section>
 
   <section class="grid" style="--min: 380px">
     <div class="card">
-      <div class="card-head"><h2>Distance per week</h2><span class="small muted">last 8 weeks</span></div>
+      <div class="card-head"><h2>Distance per week</h2><span class="small muted">{distUnit(prefs.distance)}, last 8 weeks</span></div>
       {#if weeks.length}
         <div class="bars" role="img" aria-label="Weekly distance bar chart">
           {#each weeks as w, i}
             <div class="bar-col">
-              <span class="small muted">{num(w.km)}</span>
+              <span class="small muted">{dist(w.km, prefs.distance)}</span>
               <div class="bar" style:height={`${Math.max(2, (w.km / maxKm) * 110)}px`} style:background={i === weeks.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
               <span class="small muted">{shortDate(w.week_start)}</span>
             </div>

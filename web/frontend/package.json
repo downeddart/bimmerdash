@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@fontsource/inter": "^5.1.1",
-    "@fontsource/space-grotesk": "^5.1.1"
+    "@fontsource/space-grotesk": "^5.1.1",
+    "leaflet": "^1.9.4"
   }
 }

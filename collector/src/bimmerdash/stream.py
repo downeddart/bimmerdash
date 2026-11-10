@@ -22,6 +22,7 @@ from .auth import AuthError, TokenStore, refresh
 from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details
 from .config import Config
 from .db import Database
+from .derive import rebuild_all, settings_changed_at
 
 log = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ KEEPALIVE_SECONDS = 30
 SUMMARY_EVERY = 600  # seconds between "received N messages" log lines
 DETAILS_MAX_AGE = timedelta(days=30)  # refresh vehicle basic data + image monthly
 DETAILS_RETRY = 6 * 3600  # after a failed fetch, wait before trying that VIN again
+DERIVE_AFTER_DATA = 300  # rebuild trips/fill-ups this long after new data arrives
+DERIVE_EVERY = 6 * 3600  # and at least this often (prices and averages change too)
 
 
 class RawWriter:
@@ -84,6 +87,7 @@ def run_stream(cfg: Config) -> int:
             )
 
     stats = {"messages": 0, "points": 0, "db_errors": 0}
+    new_points = threading.Event()  # set by the MQTT thread, cleared by derive
     ingest_db = Database(cfg.database_url) if cfg.database_url else None
 
     def on_message(_client, _userdata, msg):
@@ -92,7 +96,10 @@ def run_stream(cfg: Config) -> int:
         if ingest_db is None:
             return
         try:
-            stats["points"] += ingest_db.ingest(record)
+            n = ingest_db.ingest(record)
+            stats["points"] += n
+            if n:
+                new_points.set()
         except Exception as e:  # keep streaming; JSONL still has the message
             stats["db_errors"] += 1
             log.error("database write failed (%s); message kept in JSONL", e.__class__.__name__)
@@ -132,6 +139,9 @@ def run_stream(cfg: Config) -> int:
     failed_at: dict[str, float] = {}
     last_summary = time.monotonic()
     last_details_check = 0.0  # check soon after start
+    last_derive = None  # rebuild soon after start
+    data_seen_at = None
+    settings_seen = None
 
     def maybe_fetch_details() -> None:
         """Basic data + image for new VINs, refreshed monthly. Runs on this (main) thread."""
@@ -172,6 +182,30 @@ def run_stream(cfg: Config) -> int:
                 except Exception as e:
                     log.error("vehicle details check failed: %s", e)
                     main_db._conn = None
+            if main_db is not None:
+                if new_points.is_set() and data_seen_at is None:
+                    data_seen_at = now
+                due = last_derive is None or now - last_derive >= DERIVE_EVERY
+                try:
+                    changed = settings_changed_at(main_db)
+                except Exception:
+                    changed = settings_seen
+                    main_db._conn = None
+                if changed != settings_seen:
+                    settings_seen = changed
+                    due = True  # e.g. fuel grade changed in the web UI
+                if data_seen_at is not None and now - data_seen_at >= DERIVE_AFTER_DATA:
+                    due = True
+                if due:
+                    new_points.clear()
+                    data_seen_at = None
+                    last_derive = now
+                    try:
+                        for trips, fills in rebuild_all(main_db).values():
+                            log.info("derived %d trip(s), %d fill-up(s)", trips, fills)
+                    except Exception as e:
+                        log.error("deriving trips/fill-ups failed: %s", e)
+                        main_db._conn = None
             if now - last_summary >= SUMMARY_EVERY:
                 log.info(
                     "last %d min: %d message(s), %d data point(s) stored%s",

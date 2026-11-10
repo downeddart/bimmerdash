@@ -20,7 +20,13 @@ def db():
     with psycopg.connect(URL, autocommit=True) as c:
         c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
     d = Database(URL)
-    assert d.migrate() == ["001_init", "002_fuel_prices", "003_uk_average_prices"]
+    assert d.migrate() == [
+        "001_init",
+        "002_fuel_prices",
+        "003_uk_average_prices",
+        "004_trips_fillups",
+        "005_settings",
+    ]
     yield d
     d.close()
 
@@ -47,6 +53,12 @@ def q(db, sql, *args):
 
 def test_migrate_is_idempotent(db):
     assert db.migrate() == []
+
+
+def test_migrations_are_committed(db):
+    db.close()  # a migrate-only run (the `migrate` command) must leave the schema behind
+    with psycopg.connect(URL) as c:
+        assert c.execute("SELECT to_regclass('trips') IS NOT NULL").fetchone()[0]
 
 
 def test_ingest_dedupes_and_tracks_latest(db):
@@ -117,3 +129,66 @@ def test_uk_average_at(db):
     assert db.uk_average_at("petrol", date(2026, 11, 9))[0] == 172.5
     assert db.uk_average_at("petrol", date(2020, 1, 1)) is None
     assert db.fuel_finder_state()["uk_averages_at"] is None
+
+
+def test_rebuild_derives_trips_and_fillups(db):
+    from bimmerdash.derive import rebuild
+
+    def msg(ts, data):
+        return {
+            "received_at": ts.replace("Z", "+00:00"),
+            "topic": TOPIC,
+            "payload": {
+                "vin": VIN,
+                "timestamp": ts,
+                "data": {k: {"value": v, "timestamp": ts} for k, v in data.items()},
+            },
+        }
+
+    door = "vehicle.cabin.door.status"
+    odo = "vehicle.vehicle.travelledDistance"
+    lat = "vehicle.cabin.infotainment.navigation.currentLocation.latitude"
+    lon = "vehicle.cabin.infotainment.navigation.currentLocation.longitude"
+    litres = "vehicle.drivetrain.fuelSystem.remainingFuel"
+    pct = "vehicle.drivetrain.fuelSystem.level"
+    for ts, data in [
+        (
+            "2026-11-09T07:00:00Z",
+            {door: "SECURED", odo: 1000, litres: 10, pct: 20, lat: 51.5, lon: -1.0},
+        ),
+        ("2026-11-09T08:00:00Z", {door: "UNLOCKED", odo: 1000}),
+        ("2026-11-09T08:05:00Z", {door: "LOCKED", odo: 1003}),
+        # stopped at a forecourt to fill up
+        ("2026-11-09T08:15:00Z", {door: "UNLOCKED", odo: 1006, lat: 51.52, lon: -0.97}),
+        ("2026-11-09T08:25:00Z", {door: "LOCKED", odo: 1006, litres: 50, pct: 95}),
+        ("2026-11-09T08:40:00Z", {door: "SECURED", odo: 1015, lat: 51.5, lon: -1.0}),
+    ]:
+        db.ingest(msg(ts, data))
+    db.upsert_forecourts(
+        [
+            {
+                "node_id": "n1",
+                "trading_name": "Fake Fuel",
+                "location": {"latitude": 51.5201, "longitude": -0.97},
+            }
+        ]
+    )
+    db.insert_fuel_prices([("n1", "E10", "2026-11-01T00:00:00+00:00", 150.0)])
+
+    assert rebuild(db, VIN) == (1, 1)
+    trip = q(db, "SELECT distance_km, fuel_start_l, fuel_end_l FROM trips")
+    assert trip == [(15.0, 10.0, 50.0)]
+    fill = q(db, "SELECT litres_added, node_id, price_source, cost_gbp FROM fillups")
+    assert fill == [(40.0, "n1", "station", 60.0)]
+    assert q(db, "SELECT fuel_grade, fuel_kind FROM vehicles") == [("E10", "petrol")]
+    assert rebuild(db, VIN) == (1, 1)  # rebuilding replaces, never duplicates
+    assert q(db, "SELECT count(*) FROM fillups")[0][0] == 1
+
+    # A grade chosen in the web UI wins; with no E5 price there, it falls back to... nothing
+    # (no UK averages loaded in this test), so the cost is unknown rather than wrong.
+    db.conn.execute(
+        "INSERT INTO settings (scope, key, value) VALUES (%s, 'fuel_grade', '\"E5\"')", (VIN,)
+    )
+    db.conn.commit()
+    rebuild(db, VIN)
+    assert q(db, "SELECT fuel_grade, price_source, cost_gbp FROM fillups") == [("E5", None, None)]
