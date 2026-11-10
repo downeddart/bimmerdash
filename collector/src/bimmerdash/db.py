@@ -23,6 +23,7 @@ def migrate(conn: psycopg.Connection) -> list[str]:
     )
     conn.commit()
     done = {r[0] for r in conn.execute("SELECT version FROM schema_migrations")}
+    conn.commit()  # else each migration below is only a savepoint in this open transaction
     files = sorted(
         (f for f in resources.files("bimmerdash.migrations").iterdir() if f.name.endswith(".sql")),
         key=lambda f: f.name,
