@@ -8,8 +8,32 @@ import pytest
 
 from bimmerdash.db import Database
 
-URL = os.environ.get("BIMMERDASH_TEST_DATABASE_URL")
-pytestmark = pytest.mark.skipif(not URL, reason="BIMMERDASH_TEST_DATABASE_URL not set")
+ADMIN_URL = os.environ.get("BIMMERDASH_TEST_DATABASE_URL")
+TEST_DB = "bimmerdash_test"
+pytestmark = pytest.mark.skipif(not ADMIN_URL, reason="BIMMERDASH_TEST_DATABASE_URL not set")
+
+
+def _test_url(admin_url: str) -> str:
+    """Tests get their own database, recreated for each test (see fresh_database)."""
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    params = conninfo_to_dict(admin_url)
+    params["dbname"] = TEST_DB
+    return make_conninfo(**params)
+
+
+def fresh_database() -> None:
+    """Drop and recreate the test database.
+
+    Not DROP SCHEMA: that drops TimescaleDB while its background worker may be using the
+    catalog, which deadlocks now and then. WITH (FORCE) disconnects the worker first.
+    """
+    with psycopg.connect(ADMIN_URL, autocommit=True) as c:
+        c.execute(f"DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)")
+        c.execute(f"CREATE DATABASE {TEST_DB}")
+
+
+URL = _test_url(ADMIN_URL) if ADMIN_URL else None
 
 VIN = "WBA0000000TEST000"
 TOPIC = f"00000000-0000-0000-0000-000000000000/{VIN}"
@@ -17,8 +41,7 @@ TOPIC = f"00000000-0000-0000-0000-000000000000/{VIN}"
 
 @pytest.fixture
 def db():
-    with psycopg.connect(URL, autocommit=True) as c:
-        c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+    fresh_database()
     d = Database(URL)
     assert d.migrate() == [
         "001_init",
