@@ -4,7 +4,34 @@
   import { num } from '../lib/format.js';
   import { prefs, loadSettings, saveGlobal } from '../lib/prefs.svelte.js';
 
-  let { vehicle } = $props();
+  let { vehicle, account = null, onSignedOut } = $props();
+  let pwCurrent = $state('');
+  let pwNew = $state('');
+  let pwRepeat = $state('');
+  let pwMsg = $state(null);
+  let pwErr = $state(null);
+
+  async function changePassword(e) {
+    e.preventDefault();
+    pwMsg = pwErr = null;
+    if (pwNew.length < 10) return (pwErr = 'Use at least 10 characters.');
+    if (pwNew !== pwRepeat) return (pwErr = "New passwords don't match.");
+    try {
+      await api.changePassword(pwCurrent, pwNew);
+      pwCurrent = pwNew = pwRepeat = '';
+      pwMsg = 'Password changed. Other devices have been signed out.';
+    } catch (err) {
+      pwErr = err.message;
+    }
+  }
+
+  async function signOut() {
+    try {
+      await api.logout();
+    } finally {
+      onSignedOut?.();
+    }
+  }
   let all = $state(null);
   let error = $state(null);
   let saved = $state(null); // which section last saved, for the confirmation
@@ -142,6 +169,32 @@
       </div>
     </section>
   {/if}
+
+  {#if account?.enabled && account.user}
+    <section class="card">
+      <div class="head">
+        <h2>Account</h2>
+        <button class="btn" onclick={signOut}>Sign out</button>
+      </div>
+      <p class="muted small">Signed in as <strong>{account.user}</strong>.</p>
+      <form class="pw" onsubmit={changePassword}>
+        <input type="text" autocomplete="username" value={account.user} hidden readonly />
+        <label><span class="label">Current password</span><input type="password" autocomplete="current-password" bind:value={pwCurrent} required /></label>
+        <label><span class="label">New password</span><input type="password" autocomplete="new-password" bind:value={pwNew} required minlength="10" /></label>
+        <label><span class="label">Repeat new password</span><input type="password" autocomplete="new-password" bind:value={pwRepeat} required /></label>
+        <div class="inline">
+          <button class="btn" type="submit">Change password</button>
+          {#if pwMsg}<span class="ok small" role="status">{pwMsg}</span>{/if}
+          {#if pwErr}<span class="bad small" role="alert">{pwErr}</span>{/if}
+        </div>
+      </form>
+    </section>
+  {:else if account && !account.enabled}
+    <section class="card">
+      <h2>Account</h2>
+      <p class="muted small">Login is turned off (<code>BIMMERDASH_AUTH=off</code>). Only do this when something in front of bimmerdash already asks for a login.</p>
+    </section>
+  {/if}
 {/if}
 
 <style>
@@ -164,4 +217,9 @@
   .inline { display: flex; align-items: center; gap: 8px; }
   .btn { border: 1px solid var(--line-2); background: var(--card-3); border-radius: 10px; padding: 9px 16px; cursor: pointer; min-height: 42px; }
   .btn:hover { border-color: var(--accent); }
+  .pw { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; max-width: 360px; }
+  .pw label { display: flex; flex-direction: column; gap: 6px; }
+  .pw input { width: 100%; }
+  .bad { color: #ffb4b4; }
+  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
 </style>

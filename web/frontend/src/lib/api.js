@@ -1,18 +1,36 @@
-async function get(path) {
-  const r = await fetch(`/api${path}`);
-  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
+// Every call goes through here, so a 401 (session expired, signed out elsewhere) can
+// send the app back to the login screen.
+export const UNAUTHORISED = 'bimmerdash:unauthorised';
+
+async function request(method, path, body) {
+  const r = await fetch(`/api${path}`, {
+    method,
+    headers: body === undefined ? {} : { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    credentials: 'same-origin',
+  });
+  if (r.status === 401 && !path.startsWith('/auth/')) {
+    window.dispatchEvent(new Event(UNAUTHORISED));
+  }
+  if (!r.ok) {
+    let detail = `HTTP ${r.status}`;
+    try {
+      const j = await r.json();
+      if (typeof j.detail === 'string') detail = j.detail;
+      else if (Array.isArray(j.detail)) detail = j.detail.map((d) => d.msg).join('; ');
+    } catch {
+      /* not JSON */
+    }
+    const e = new Error(detail);
+    e.status = r.status;
+    throw e;
+  }
   return r.json();
 }
 
-async function put(path, body) {
-  const r = await fetch(`/api${path}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) throw new Error(`${path}: HTTP ${r.status}`);
-  return r.json();
-}
+const get = (path) => request('GET', path);
+const put = (path, body) => request('PUT', path, body);
+const post = (path, body = {}) => request('POST', path, body);
 
 export const api = {
   vehicles: () => get('/vehicles'),
@@ -26,5 +44,10 @@ export const api = {
   settings: () => get('/settings'),
   putSettings: (body) => put('/settings', body),
   putVehicleSettings: (vin, body) => put(`/vehicles/${vin}/settings`, body),
+  authState: () => get('/auth/state'),
+  login: (username, password) => post('/auth/login', { username, password }),
+  setup: (username, password) => post('/auth/setup', { username, password }),
+  logout: () => post('/auth/logout'),
+  changePassword: (current, next) => post('/auth/password', { current, new: next }),
   imageUrl: (vin) => `/api/vehicles/${vin}/image`,
 };

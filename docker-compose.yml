@@ -46,8 +46,9 @@ services:
     environment:
       BIMMERDASH_DATABASE_URL: postgresql://bimmerdash:${BIMMERDASH_DB_PASSWORD}@db:5432/bimmerdash
       BIMMERDASH_LOG_LEVEL: ${BIMMERDASH_LOG_LEVEL:-INFO}
+      BIMMERDASH_AUTH: ${BIMMERDASH_AUTH:-on}
     ports:
-      # No login yet: keep this on your LAN or behind a reverse proxy with auth.
+      # Plain HTTP: fine on your LAN. For access from outside, put HTTPS in front.
       - "${BIMMERDASH_WEB_PORT:-8320}:8320"
     depends_on:
       db:

@@ -38,7 +38,8 @@ def test_overview_interprets_values():
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    monkeypatch.setenv("BIMMERDASH_AUTH", "off")  # login has its own tests below
     if not URL:
         pytest.skip("BIMMERDASH_TEST_DATABASE_URL not set")
     from bimmerdash.db import Database
@@ -219,3 +220,108 @@ def test_settings_round_trip(client):
     assert bad.status_code == 422
     other = client.put("/api/vehicles/WBA0000000OTHER00/settings", json={"fuel_grade": "E5"})
     assert other.status_code == 404
+
+
+def test_password_hashing():
+    from bimmerdash_web.auth import hash_password, verify_password
+
+    h = hash_password("correct horse battery")
+    assert h.startswith("scrypt$") and "correct" not in h
+    assert verify_password("correct horse battery", h)
+    assert not verify_password("wrong", h)
+    assert not verify_password("x", "garbage")
+
+
+def test_rate_limiter():
+    from bimmerdash_web.auth import RateLimiter
+
+    rl = RateLimiter(limit=3, window=60)
+    for _ in range(3):
+        assert rl.blocked("1.2.3.4") == 0
+        rl.failed("1.2.3.4")
+    assert rl.blocked("1.2.3.4") > 0
+    assert rl.blocked("5.6.7.8") == 0  # other clients unaffected
+    rl.reset("1.2.3.4")
+    assert rl.blocked("1.2.3.4") == 0
+
+
+def test_login_flow(client, monkeypatch):
+    monkeypatch.setenv("BIMMERDASH_AUTH", "on")
+    client.cookies.clear()
+    # Everything except health and the login endpoints needs a session.
+    assert client.get("/api/health").status_code == 200
+    assert client.get("/api/vehicles").status_code == 401
+    assert client.get(f"/api/vehicles/{VIN}/image").status_code == 401
+    assert client.get("/api/openapi.json").status_code == 401
+    assert client.get("/api/auth/state").json() == {
+        "enabled": True,
+        "setup_required": True,
+        "user": None,
+    }
+    # First account: password rules, then success signs you in.
+    assert (
+        client.post("/api/auth/setup", json={"username": "me", "password": "short"}).status_code
+        == 422
+    )
+    r = client.post("/api/auth/setup", json={"username": "me", "password": "long enough pw"})
+    assert r.status_code == 200
+    cookie = r.headers["set-cookie"].lower()
+    assert "httponly" in cookie and "samesite=lax" in cookie
+    assert client.get("/api/vehicles").status_code == 200
+    assert client.get("/api/auth/state").json()["user"] == "me"
+    # Setup can't be used again to take over.
+    again = client.post("/api/auth/setup", json={"username": "evil", "password": "long enough pw"})
+    assert again.status_code == 409
+
+    client.post("/api/auth/logout")
+    client.cookies.clear()
+    assert client.get("/api/vehicles").status_code == 401
+    bad = client.post("/api/auth/login", json={"username": "me", "password": "nope"})
+    assert bad.status_code == 401
+    unknown = client.post("/api/auth/login", json={"username": "nobody", "password": "nope"})
+    assert unknown.status_code == 401
+    ok = client.post("/api/auth/login", json={"username": "me", "password": "long enough pw"})
+    assert ok.status_code == 200 and client.get("/api/vehicles").status_code == 200
+
+    # Changing the password needs the current one, and ends other sessions.
+    other = TestClient(client.app)
+    other.post("/api/auth/login", json={"username": "me", "password": "long enough pw"})
+    wrong = client.post("/api/auth/password", json={"current": "x", "new": "another long pw"})
+    assert wrong.status_code == 403
+    r = client.post(
+        "/api/auth/password", json={"current": "long enough pw", "new": "another long pw"}
+    )
+    assert r.status_code == 200
+    assert client.get("/api/vehicles").status_code == 200
+    assert other.get("/api/vehicles").status_code == 401
+
+
+def test_login_rate_limited(client, monkeypatch):
+    monkeypatch.setenv("BIMMERDASH_AUTH", "on")
+    client.cookies.clear()
+    client.post("/api/auth/setup", json={"username": "me", "password": "long enough pw"})
+    client.cookies.clear()
+    codes = [
+        client.post("/api/auth/login", json={"username": "me", "password": f"guess{i}"}).status_code
+        for i in range(11)
+    ]
+    assert codes[:10] == [401] * 10 and codes[10] == 429
+    # Even the right password is refused while blocked.
+    right = client.post("/api/auth/login", json={"username": "me", "password": "long enough pw"})
+    assert right.status_code == 429
+
+
+def test_set_password_command(client, monkeypatch, capsys):
+    import io
+
+    from bimmerdash_web.app import main
+
+    monkeypatch.setenv("BIMMERDASH_DATABASE_URL", URL)
+    monkeypatch.setattr("sys.stdin", io.StringIO("a brand new password\n"))
+    assert main(["set-password", "admin"]) == 0
+    assert "Password set for admin" in capsys.readouterr().out
+    monkeypatch.setenv("BIMMERDASH_AUTH", "on")
+    ok = client.post(
+        "/api/auth/login", json={"username": "admin", "password": "a brand new password"}
+    )
+    assert ok.status_code == 200
