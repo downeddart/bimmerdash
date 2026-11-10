@@ -50,6 +50,7 @@ def db():
         "004_trips_fillups",
         "005_settings",
         "006_web_auth",
+        "007_places",
     ]
     yield d
     d.close()

@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, derived, queries, settings
+from . import auth, derived, queries, settings, usage
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
@@ -192,6 +192,35 @@ def create_app(database_url: str | None = None) -> FastAPI:
     def nearby(vin: str, radius_km: float = 5):
         with pool.connection() as conn:
             return derived.nearby_prices(conn, vin_or_404(vin), max(0.5, min(radius_km, 30)))
+
+    @app.get("/api/vehicles/{vin}/usage")
+    def vehicle_usage(vin: str):
+        with pool.connection() as conn:
+            return usage.usage(conn, vin_or_404(vin))
+
+    @app.get("/api/places")
+    def list_places():
+        with pool.connection() as conn:
+            return usage.places(conn)
+
+    @app.post("/api/places")
+    def add_place(body: usage.NewPlace):
+        with pool.connection() as conn:
+            return usage.add_place(conn, body)
+
+    @app.put("/api/places/{place_id}")
+    def rename_place(place_id: int, body: usage.PlaceName):
+        with pool.connection() as conn:
+            if not usage.rename_place(conn, place_id, body.name):
+                raise HTTPException(404, "no such place")
+            return {"ok": True}
+
+    @app.delete("/api/places/{place_id}")
+    def delete_place(place_id: int):
+        with pool.connection() as conn:
+            if not usage.delete_place(conn, place_id):
+                raise HTTPException(404, "no such place")
+            return {"ok": True}
 
     @app.get("/api/settings")
     def get_settings():

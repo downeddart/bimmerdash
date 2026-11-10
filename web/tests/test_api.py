@@ -8,6 +8,7 @@ import os
 import psycopg
 import pytest
 from fastapi.testclient import TestClient
+from psycopg.types.json import Jsonb
 
 from bimmerdash_web.queries import overview
 
@@ -348,3 +349,57 @@ def test_set_password_command(client, monkeypatch, capsys):
         "/api/auth/login", json={"username": "admin", "password": "a brand new password"}
     )
     assert ok.status_code == 200
+
+
+def test_destinations_group_by_named_place_then_distance():
+    from datetime import UTC, datetime
+
+    from bimmerdash_web.usage import destinations, place_at
+
+    t = lambda d: datetime(2026, 11, d, tzinfo=UTC)  # noqa: E731
+    home = {"id": 1, "name": "Home", "lat": 51.5, "lon": -1.0, "radius_m": 150}
+    ends = [
+        {"time": t(1), "lat": 51.5003, "lon": -1.0},  # ~33 m from home
+        {"time": t(2), "lat": 51.5, "lon": -1.0005},
+        {"time": t(3), "lat": 51.6, "lon": -1.1},  # unnamed, twice ~100 m apart
+        {"time": t(4), "lat": 51.6009, "lon": -1.1},
+        {"time": t(5), "lat": 52.0, "lon": -1.5},  # far away, once
+        {"time": t(6), "lat": None, "lon": None},
+    ]
+    got = destinations(ends, [home])
+    assert [(g["name"], g["visits"]) for g in got] == [("Home", 2), (None, 2), (None, 1)]
+    assert got[1]["lat"] == (51.6 + 51.6009) / 2
+    assert place_at([home], 51.5003, -1.0)["name"] == "Home"
+    assert place_at([home], 51.51, -1.0) is None
+
+
+def test_usage_and_places(client):
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute(
+            "UPDATE vehicles SET basic_data = %s",
+            (Jsonb({"constructionDate": "2021-03-02T00:00:00.000+0000"}),),
+        )
+        c.execute(
+            "INSERT INTO trips (vin, start_time, end_time, distance_km, end_lat, end_lon)"
+            " VALUES (%s, now() - interval '2 h', now() - interval '90 min', 3, 51.5, -1.0),"
+            " (%s, now() - interval '1 h', now() - interval '30 min', 12, 51.6, -1.1)",
+            (VIN, VIN),
+        )
+    u = client.get(f"/api/vehicles/{VIN}/usage").json()
+    m = u["mileage"]
+    # 106,682 km since March 2021: the lifetime rate, as there's under 4 weeks of history.
+    assert m["estimate_basis"] == "lifetime" and 17000 < m["estimate_km_per_year"] < 20000
+    assert u["stats"]["trips"] == 2 and u["stats"]["short_trip_share"] == 0.5
+    assert len(u["trips"]) == 2 and len(u["destinations"]) == 2
+
+    p = client.post("/api/places", json={"name": " Home ", "lat": 51.5, "lon": -1.0}).json()
+    assert p["name"] == "Home"
+    trips = client.get(f"/api/vehicles/{VIN}/trips").json()["trips"]
+    assert [t["end_place"]["name"] if t["end_place"] else None for t in trips] == [None, "Home"]
+    dests = client.get(f"/api/vehicles/{VIN}/usage").json()["destinations"]
+    assert sorted(d["name"] or "" for d in dests) == ["", "Home"]
+    assert client.put(f"/api/places/{p['id']}", json={"name": "House"}).status_code == 200
+    assert client.get("/api/places").json()[0]["name"] == "House"
+    assert client.post("/api/places", json={"name": "", "lat": 1, "lon": 1}).status_code == 422
+    assert client.delete(f"/api/places/{p['id']}").status_code == 200
+    assert client.delete(f"/api/places/{p['id']}").status_code == 404

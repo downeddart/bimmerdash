@@ -19,12 +19,12 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - [x] Vehicle details and BMW's render of your car (2 API calls, refreshed monthly)
 - [x] Trips, fill-ups and fuel economy
 - [x] Fuel cost via the UK Fuel Finder price data (UK weekly averages where no station price)
-- [ ] Mileage and usage analytics (annual projection, when/where you drive)
+- [x] Mileage and usage analytics (annual projection, when/where you drive, named places)
 - [x] Web UI: overview with your car's picture, raw data explorer (dark, mobile-friendly)
 - [x] Web UI: trips and fuel pages, with maps
 - [x] Login (single account, first-run setup, password reset command)
 - [x] Settings: miles or km, mpg or L/100 km, fuel grade (E10, E5, diesel)
-- [ ] Web UI: insights page
+- [x] Web UI: insights page, live map of the car on Overview
 - [ ] Pushover alerts (left unlocked, low fuel, service due, stream silent)
 
 ## Quick start

@@ -3,11 +3,15 @@
   import { api } from '../lib/api.js';
   import { ago, num, title, shortDate, DASH, dist, distUnit, measure } from '../lib/format.js';
   import { prefs } from '../lib/prefs.svelte.js';
+  import { placeAt } from '../lib/geo.js';
+  import MapView from '../components/MapView.svelte';
 
   let { vehicle } = $props();
   let o = $state(null);
   let weeks = $state([]);
   let imageOk = $state(true);
+  let places = $state([]);
+  const here = $derived(o?.location ? placeAt(places, o.location) : null);
 
   const name = $derived([vehicle.model_name, vehicle.body_type].filter(Boolean).join(' ') || 'Your car');
   const locked = $derived(
@@ -55,6 +59,7 @@
     const [ov, wk] = await Promise.all([api.overview(vehicle.vin), api.weekly(vehicle.vin, 8)]);
     o = ov;
     weeks = wk;
+    api.places().then((p) => (places = p)).catch(() => {});
   }
 
   onMount(() => {
@@ -104,16 +109,21 @@
       </div>
       <div class="fuel-facts">
         <div><span class="muted">Range</span><span class="num mid">{o.range ? dist(o.range.value, prefs.distance) : DASH} <span class="unit">{distUnit(prefs.distance)}</span></span></div>
-        <div><span class="muted">In the tank</span><span class="num mid">{o.fuel_litres ? num(o.fuel_litres.value, 1) : DASH} <span class="unit">{o.fuel_litres?.unit ?? 'L'}</span></span></div>
+        <div><span class="muted">In the tank</span><span class="num mid">{o.fuel_litres ? num(o.fuel_litres.value, 1) : DASH} <span class="unit">L</span></span></div>
       </div>
     </div>
 
     <div class="card location">
-      <h2>Where it is</h2>
+      <div class="loc-head">
+        <h2>{here ? `At ${here.name}` : 'Where it is'}</h2>
+        {#if o.location}<span class="small muted">heading {num(o.location.heading)}°</span>{/if}
+      </div>
       {#if o.location}
-        <p class="num mid">{o.location.lat.toFixed(4)}, {o.location.lon.toFixed(4)}</p>
-        <p class="muted">Heading {num(o.location.heading)}°</p>
-        <a href={`https://www.openstreetmap.org/?mlat=${o.location.lat}&mlon=${o.location.lon}#map=16/${o.location.lat}/${o.location.lon}`} target="_blank" rel="noopener noreferrer">Open in OpenStreetMap</a>
+        <MapView
+          markers={[{ lat: o.location.lat, lon: o.location.lon, colour: '#5aa2ff', radius: 9, label: here?.name ?? 'Your car' }]}
+          height={230}
+          label="Car location"
+        />
       {:else}
         <p class="muted">No GPS position yet. It normally arrives after a drive.{o.heading != null ? ` Last heading ${num(o.heading)}°.` : ''}</p>
       {/if}
@@ -162,6 +172,8 @@
 {/if}
 
 <style>
+  .location { display: flex; flex-direction: column; gap: 14px; }
+  .loc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
   header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
   header > div { display: flex; flex-direction: column; gap: 6px; }
 
