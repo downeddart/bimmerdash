@@ -11,7 +11,31 @@ from fastapi.testclient import TestClient
 
 from bimmerdash_web.queries import overview
 
-URL = os.environ.get("BIMMERDASH_TEST_DATABASE_URL")
+ADMIN_URL = os.environ.get("BIMMERDASH_TEST_DATABASE_URL")
+TEST_DB = "bimmerdash_web_test"
+
+
+def _test_url(admin_url: str) -> str:
+    """Tests get their own database, recreated for each test (see fresh_database)."""
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    params = conninfo_to_dict(admin_url)
+    params["dbname"] = TEST_DB
+    return make_conninfo(**params)
+
+
+def fresh_database() -> None:
+    """Drop and recreate the test database.
+
+    Not DROP SCHEMA: that drops TimescaleDB while its background worker may be using the
+    catalog, which deadlocks now and then. WITH (FORCE) disconnects the worker first.
+    """
+    with psycopg.connect(ADMIN_URL, autocommit=True) as c:
+        c.execute(f"DROP DATABASE IF EXISTS {TEST_DB} WITH (FORCE)")
+        c.execute(f"CREATE DATABASE {TEST_DB}")
+
+
+URL = _test_url(ADMIN_URL) if ADMIN_URL else None
 VIN = "WBA0000000TEST000"  # fake
 TOPIC = f"00000000-0000-0000-0000-000000000000/{VIN}"
 
@@ -46,8 +70,7 @@ def client(monkeypatch):
 
     from bimmerdash_web.app import create_app
 
-    with psycopg.connect(URL, autocommit=True) as c:
-        c.execute("DROP SCHEMA public CASCADE; CREATE SCHEMA public;")
+    fresh_database()
     db = Database(URL)
     db.migrate()
     for i, (odo, ts) in enumerate(
