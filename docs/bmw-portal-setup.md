@@ -22,15 +22,16 @@ CarData is only on the **BMW website**, not in the MyBMW phone app.
 ## 3. Create a stream
 
 1. Scroll to **CarData Streaming** and create a stream.
-2. Select **all** data points. Streaming may deliver incomplete data otherwise.
-   There are around 245; to tick them all at once, open the browser console (F12) and run:
-
-   ```js
-   document.querySelectorAll('input[type="checkbox"]:not(:checked)').forEach(c => c.click());
-   ```
-
-   Expand collapsed sections first, and untick anything unrelated it may have caught.
+2. Select **all** data points (around 250). Streaming only sends what is ticked here.
+   Click **Load more** until the button disappears, then tick each box by hand. The portal
+   reloads the list after every tick, dropping back to the first ~75 items, so you will need
+   to click **Load more** again to reach the rest. Browser-console "tick all" scripts do not
+   work against this behaviour.
 3. Save.
+4. Check what actually arrives: after the next lock/unlock or drive, run
+   `docker compose run --rm collector keys --redact`. A full selection gives far more than
+   a handful of keys; fuel level (`vehicle.drivetrain.fuelSystem.level`) and position
+   (`vehicle.cabin.infotainment.navigation.currentLocation.latitude`) are the important ones.
 
 ## Notes
 
