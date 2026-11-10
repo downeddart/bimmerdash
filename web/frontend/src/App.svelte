@@ -4,7 +4,8 @@
   import { ago, shortDate } from './lib/format.js';
   import Overview from './pages/Overview.svelte';
   import Data from './pages/Data.svelte';
-  import Placeholder from './pages/Placeholder.svelte';
+  import Trips from './pages/Trips.svelte';
+  import Fuel from './pages/Fuel.svelte';
 
   const routes = {
     '/': { label: 'Overview', icon: 'grid' },
@@ -126,9 +127,9 @@
     {:else if path === '/data'}
       <Data {vehicle} />
     {:else if path === '/trips'}
-      <Placeholder title="Trips" text="Trip detection is being built from your first days of driving data. Each trip will show its route, distance, duration and fuel used." />
+      <Trips {vehicle} />
     {:else}
-      <Placeholder title="Fuel" text="Fill-up detection and fuel cost tracking are next. Economy per tank, monthly spend and local prices will appear here." />
+      <Fuel {vehicle} />
     {/if}
   </main>
 </div>

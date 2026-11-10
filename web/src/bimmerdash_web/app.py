@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 
-from . import queries
+from . import derived, queries
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
@@ -75,6 +75,21 @@ def create_app(database_url: str | None = None) -> FastAPI:
     def weekly(vin: str, weeks: int = 8):
         with pool.connection() as conn:
             return queries.weekly_distance(conn, vin_or_404(vin), max(1, min(weeks, 104)))
+
+    @app.get("/api/vehicles/{vin}/trips")
+    def trips(vin: str, limit: int = 200):
+        with pool.connection() as conn:
+            return derived.trips(conn, vin_or_404(vin), max(1, min(limit, 2000)))
+
+    @app.get("/api/vehicles/{vin}/fuel")
+    def fuel(vin: str):
+        with pool.connection() as conn:
+            return derived.fuel(conn, vin_or_404(vin))
+
+    @app.get("/api/vehicles/{vin}/fuel/nearby")
+    def nearby(vin: str, radius_km: float = 5):
+        with pool.connection() as conn:
+            return derived.nearby_prices(conn, vin_or_404(vin), max(0.5, min(radius_km, 30)))
 
     # Single-page app: real files from the build, everything else falls back to index.html.
     if (STATIC_DIR / "index.html").exists():

@@ -14,7 +14,8 @@ export function ago(iso) {
   if (s < 60) return 'just now';
   if (s < 3600) return `${Math.round(s / 60)} min ago`;
   if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-  return `${Math.round(s / 86400)} days ago`;
+  const d = Math.round(s / 86400);
+  return d === 1 ? 'yesterday' : `${d} days ago`;
 }
 
 export function title(text) {
@@ -32,3 +33,38 @@ export function display(value) {
   if (typeof value === 'object') return JSON.stringify(value);
   return String(value);
 }
+
+export function dateTime(iso) {
+  return new Date(iso).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+export function time(iso) {
+  return new Date(iso).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+export function longDate(iso) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+export function duration(minutes) {
+  if (minutes == null) return DASH;
+  const m = Math.round(minutes);
+  return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} m`;
+}
+
+const gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
+export function money(v) {
+  return v == null ? DASH : gbp.format(v);
+}
+
+export function monthName(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'short' });
+}
+
+// UK gallons: mpg = 282.481 / (L/100 km)
+export function economy(l100, unit) {
+  if (l100 == null) return DASH;
+  return unit === 'mpg' ? nf1.format(282.481 / l100) : nf1.format(l100);
+}
+export const economyUnit = (unit) => (unit === 'mpg' ? 'mpg (UK)' : 'L/100 km');

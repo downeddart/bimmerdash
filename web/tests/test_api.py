@@ -111,3 +111,88 @@ def test_classify_freshness():
     assert classify_freshness(None, None, None, now)["station_prices"]["status"] == "off"
     old_sync = classify_freshness(None, None, now - timedelta(hours=3), now)
     assert old_sync["station_prices"]["status"] == "stale"
+
+
+def test_with_intervals_handles_partial_fills():
+    from datetime import UTC, datetime
+
+    from bimmerdash_web.derived import monthly, with_intervals
+
+    def f(day, odo, before, after, cost=None, source=None):
+        return {
+            "time": datetime(2026, 10, day, tzinfo=UTC),
+            "odometer": odo,
+            "litres_before": before,
+            "litres_after": after,
+            "cost_gbp": cost,
+            "price_source": source,
+        }
+
+    fills = with_intervals(
+        [f(1, 1000, 10, 50, 60.0, "station"), f(8, 1600, 14, 40, 40.0, "uk_average")]
+    )
+    assert fills[0]["economy_l100"] is None
+    # 50 L in the tank after the first fill, 14 L left before the second: 36 L over 600 km.
+    assert (fills[1]["km_since_last"], fills[1]["used_since_last_l"]) == (600, 36)
+    assert fills[1]["economy_l100"] == 6.0
+    assert monthly(fills) == [{"month": "2026-10", "cost": 100.0, "estimated": 40.0, "fillups": 2}]
+
+
+def test_trips_and_fuel_endpoints(client):
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute(
+            "INSERT INTO trips (vin, start_time, end_time, distance_km, start_lat, start_lon,"
+            " end_lat, end_lon, fuel_used_l, route) VALUES"
+            " (%s, now() - interval '1 hour', now() - interval '40 minutes', 12, 51.5, -1.0,"
+            "  51.6, -1.1, 1, '[]')",
+            (VIN,),
+        )
+        c.execute(
+            "INSERT INTO forecourts (node_id, trading_name, latitude, longitude)"
+            " VALUES ('n1', 'Fake Fuel', 51.601, -1.1), ('n2', 'Far Fuel', 52.5, -1.1)"
+        )
+        c.execute(
+            "INSERT INTO fuel_prices (node_id, fuel_type, effective_at, price) VALUES"
+            " ('n1', 'E10', now() - interval '1 day', 151.9),"
+            " ('n2', 'E10', now() - interval '1 day', 140.9)"
+        )
+        c.execute(
+            "INSERT INTO fillups (vin, time, odometer, litres_before, litres_after,"
+            " litres_added, node_id, station, price_ppl, price_source, cost_gbp)"
+            " VALUES (%s, now() - interval '2 hours', 106000, 10, 50, 40, 'n1',"
+            "  '{\"trading_name\": \"Fake Fuel\"}', 151.9, 'station', 60.76)",
+            (VIN,),
+        )
+    t = client.get(f"/api/vehicles/{VIN}/trips").json()
+    assert t["trips"][0]["distance_km"] == 12 and t["trips"][0]["minutes"] == 20
+    assert t["trips"][0]["end"] == {"lat": 51.6, "lon": -1.1}
+    assert t["summary"]["month_trips"] >= 1
+
+    fuel = client.get(f"/api/vehicles/{VIN}/fuel").json()
+    assert fuel["fillups"][0]["station"]["trading_name"] == "Fake Fuel"
+    assert fuel["summary"]["total_cost"] == 60.76 and fuel["summary"]["total_estimated"] == 0
+
+    # Only one trip ends there, so "home" falls back to... no live position: nothing nearby.
+    near = client.get(f"/api/vehicles/{VIN}/fuel/nearby").json()
+    assert near["centre"] is None
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute(
+            "INSERT INTO latest_values (vin, key, time, value, value_num) VALUES"
+            " (%s, 'vehicle.cabin.infotainment.navigation.currentLocation.latitude', now(),"
+            "  '51.6', 51.6),"
+            " (%s, 'vehicle.cabin.infotainment.navigation.currentLocation.longitude', now(),"
+            "  '-1.1', -1.1)",
+            (VIN, VIN),
+        )
+    near = client.get(f"/api/vehicles/{VIN}/fuel/nearby").json()
+    assert near["centre"]["source"] == "car"
+    assert [s["name"] for s in near["stations"]] == ["Fake Fuel"]  # the other is 100 km away
+
+
+def test_tidy_name():
+    from bimmerdash_web.derived import tidy_name
+
+    assert tidy_name("DURHAM ROAD FILLING STATION,") == "Durham Road Filling Station"
+    assert tidy_name("SAINSBURYS TEAM VALLEY") == "Sainsburys Team Valley"
+    assert tidy_name("Falcon Service Station") == "Falcon Service Station"
+    assert tidy_name("ESSO OF THE NORTH") == "Esso of the North"

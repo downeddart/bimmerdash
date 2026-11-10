@@ -5,8 +5,8 @@ streaming API. In the spirit of TeslaMate / RiviAmigo, but for BMWs, including
 combustion cars.
 
 > **Status: early.** bimmerdash signs in to BMW, records the CarData stream into
-> TimescaleDB, fetches your car's details and picture, and shows them in a dark web UI.
-> Trip/fill-up detection and fuel cost analytics are in progress.
+> TimescaleDB, fetches your car's details and picture, and shows them in a dark web UI
+> with trips, detected fill-ups, fuel costs and local fuel prices.
 
 Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 
@@ -17,11 +17,12 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - [x] `keys` command to see which data points your car sends
 - [x] PostgreSQL/TimescaleDB storage (every data point, any key)
 - [x] Vehicle details and BMW's render of your car (2 API calls, refreshed monthly)
-- [ ] Trips, fill-ups and fuel economy
-- [ ] Fuel cost via the UK Fuel Finder price data
+- [x] Trips, fill-ups and fuel economy
+- [x] Fuel cost via the UK Fuel Finder price data (UK weekly averages where no station price)
 - [ ] Mileage and usage analytics (annual projection, when/where you drive)
 - [x] Web UI: overview with your car's picture, raw data explorer (dark, mobile-friendly)
-- [ ] Web UI: trips, fuel and insights pages
+- [x] Web UI: trips and fuel pages, with maps
+- [ ] Web UI: insights page
 - [ ] Pushover alerts (left unlocked, low fuel, service due, stream silent)
 
 ## Quick start
@@ -60,9 +61,25 @@ Pin a version with `BIMMERDASH_VERSION` in `.env`.
 
 | Command | What it does |
 | --- | --- |
+| `derive` | Rebuild trips and fill-ups from stored data (the collector does this every few minutes) |
 | `import-raw` | Load recorded JSONL files into the database (safe to re-run) |
 | `fetch-vehicle` | Re-fetch vehicle details and picture now (2 API calls) |
 | `migrate` | Create/upgrade the database schema (the collector does this on start) |
+
+### How trips and fill-ups are detected
+
+BMW doesn't send "trip" or "fill-up" events, so bimmerdash works them out:
+
+- **Trip**: from opening the car until it is locked from outside, if the odometer moved
+  at least 1 km or the car's position changed. Positions arrive every few minutes, so
+  routes on the map are approximate.
+- **Fill-up**: a jump of 4 L or more in the fuel level. If the car reported a position on
+  a forecourt in between, the cost uses that station's price from UK Fuel Finder.
+  Otherwise it uses the UK weekly average price (DESNZ), shown as **~£ / UK avg**.
+- **Economy** comes from fuel burned between fill-ups, so partial fills work too.
+
+Everything is recalculated from the stored data, so improvements apply to past trips.
+For maps, your browser loads tiles from OpenStreetMap.
 
 BMW allows 50 CarData API calls per day. bimmerdash logs every call and stops at 45.
 

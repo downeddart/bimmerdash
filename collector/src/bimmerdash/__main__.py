@@ -61,6 +61,18 @@ def cmd_migrate(cfg: Config) -> int:
     return 0
 
 
+def cmd_derive(cfg: Config) -> int:
+    from .derive import rebuild_all
+
+    db = _require_db(cfg)
+    if db is None:
+        return 2
+    db.migrate()
+    for i, (trips, fills) in enumerate(rebuild_all(db).values(), 1):
+        print(f"Car {i}: {trips} trip(s), {fills} fill-up(s)")
+    return 0
+
+
 def cmd_import_raw(cfg: Config) -> int:
     """Load the JSONL files into the database. Safe to re-run: duplicates are skipped."""
     db = _require_db(cfg)
@@ -145,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
     keys.add_argument("--redact", action="store_true", help="hide values (safe to share)")
     sub.add_parser("migrate", help="create/upgrade the database schema")
     sub.add_parser("import-raw", help="load recorded JSONL files into the database")
+    sub.add_parser("derive", help="rebuild trips and fill-ups from stored data")
     sub.add_parser("fetch-vehicle", help="fetch vehicle details and image now (uses API quota)")
     prices = sub.add_parser("prices", help="keep UK fuel price history in sync (Fuel Finder)")
     prices.add_argument("--once", action="store_true", help="sync once and exit")
@@ -170,6 +183,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_migrate(cfg)
     if args.command == "import-raw":
         return cmd_import_raw(cfg)
+    if args.command == "derive":
+        return cmd_derive(cfg)
     if args.command == "fetch-vehicle":
         return cmd_fetch_vehicle(cfg)
     if args.command == "prices":
