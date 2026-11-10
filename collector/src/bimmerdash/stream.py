@@ -22,7 +22,7 @@ from .auth import AuthError, TokenStore, refresh
 from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details
 from .config import Config
 from .db import Database
-from .derive import rebuild_all
+from .derive import rebuild_all, settings_changed_at
 
 log = logging.getLogger(__name__)
 
@@ -141,6 +141,7 @@ def run_stream(cfg: Config) -> int:
     last_details_check = 0.0  # check soon after start
     last_derive = None  # rebuild soon after start
     data_seen_at = None
+    settings_seen = None
 
     def maybe_fetch_details() -> None:
         """Basic data + image for new VINs, refreshed monthly. Runs on this (main) thread."""
@@ -185,6 +186,14 @@ def run_stream(cfg: Config) -> int:
                 if new_points.is_set() and data_seen_at is None:
                     data_seen_at = now
                 due = last_derive is None or now - last_derive >= DERIVE_EVERY
+                try:
+                    changed = settings_changed_at(main_db)
+                except Exception:
+                    changed = settings_seen
+                    main_db._conn = None
+                if changed != settings_seen:
+                    settings_seen = changed
+                    due = True  # e.g. fuel grade changed in the web UI
                 if data_seen_at is not None and now - data_seen_at >= DERIVE_AFTER_DATA:
                     due = True
                 if due:

@@ -6,12 +6,15 @@
   import Data from './pages/Data.svelte';
   import Trips from './pages/Trips.svelte';
   import Fuel from './pages/Fuel.svelte';
+  import Settings from './pages/Settings.svelte';
+  import { loadSettings } from './lib/prefs.svelte.js';
 
   const routes = {
     '/': { label: 'Overview', icon: 'grid' },
     '/trips': { label: 'Trips', icon: 'route' },
     '/fuel': { label: 'Fuel', icon: 'fuel' },
     '/data': { label: 'Data', icon: 'list' },
+    '/settings': { label: 'Settings', icon: 'gear' },
   };
 
   let path = $state(currentPath());
@@ -59,6 +62,7 @@
     window.addEventListener('hashchange', onHash);
     api.vehicles().then((v) => (vehicles = v)).catch((e) => (error = e.message));
     loadStatus();
+    loadSettings().catch(() => {});
     const t = setInterval(loadStatus, 60_000);
     return () => {
       window.removeEventListener('hashchange', onHash);
@@ -85,6 +89,8 @@
               <circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="5" r="2.5" /><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5" />
             {:else if r.icon === 'fuel'}
               <path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13" /><path d="M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3" /><path d="M7 8h5" />
+            {:else if r.icon === 'gear'}
+              <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
             {:else}
               <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
             {/if}
@@ -113,7 +119,9 @@
   </nav>
 
   <main>
-    {#if error}
+    {#if path === '/settings'}
+      <Settings {vehicle} />
+    {:else if error}
       <div class="card">Could not reach the bimmerdash API: {error}</div>
     {:else if vehicles === null}
       <div class="muted">Loading…</div>

@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { num, money, longDate, shortDate, monthName, ago, economy, economyUnit, DASH } from '../lib/format.js';
+  import { num, money, longDate, shortDate, monthName, ago, economy, economyUnit, DASH, toUnit, distUnit, perDistance } from '../lib/format.js';
   import { prefs, setEconomyUnit } from '../lib/prefs.svelte.js';
   import MapView from '../components/MapView.svelte';
 
@@ -89,8 +89,8 @@
       {/if}
     </div>
     <div class="card tile">
-      <span class="muted">Fuel cost per km</span>
-      <span class="num tile-v">{s?.pence_per_km != null ? `${num(s.pence_per_km, 1)}p` : DASH}</span>
+      <span class="muted">Fuel cost per {prefs.distance === 'mi' ? 'mile' : 'km'}</span>
+      <span class="num tile-v">{s?.pence_per_km != null ? `${num(perDistance(s.pence_per_km, prefs.distance), 1)}p` : DASH}</span>
       <span class="small muted">{s?.avg_price_ppl ? `at ${num(s.avg_price_ppl, 1)}p/L recently` : 'needs economy and prices'}</span>
     </div>
   </div>
@@ -128,14 +128,14 @@
       {:else if !nearby.centre}
         <p class="muted">Needs the car's position first.</p>
       {:else if !stations.length}
-        <p class="muted">No recent prices within {num(nearby.radius_km)} km. Station prices need Fuel Finder credentials in <code>.env</code>.</p>
+        <p class="muted">No recent prices within {num(toUnit(nearby.radius_km, prefs.distance))} {distUnit(prefs.distance)}. Station prices need Fuel Finder credentials in <code>.env</code>.</p>
       {:else}
         <ul class="stations">
           {#each stations as x, i}
             <li>
               <div>
                 <div class="st-name">{x.name}</div>
-                <div class="small muted">{num(x.distance_km, 1)} km away · updated {ago(x.updated_at)}</div>
+                <div class="small muted">{num(toUnit(x.distance_km, prefs.distance), 1)} {distUnit(prefs.distance)} away · updated {ago(x.updated_at)}</div>
               </div>
               <span class="num price" class:best={i === 0}>{num(x.price, 1)}p</span>
             </li>
@@ -190,7 +190,7 @@
                 <td class="r">{f.litres_added != null ? `${f.litres_estimated ? '≈' : ''}${num(f.litres_added, 1)} L` : DASH}</td>
                 <td class="r num" class:est={isAvg(f)}>{f.cost_gbp != null ? `${isAvg(f) ? '~' : ''}${money(f.cost_gbp)}` : DASH}</td>
                 <td class="small">{f.percent_before != null ? `${num(f.percent_before)}% → ${num(f.percent_after)}%` : DASH}</td>
-                <td class="r">{f.km_since_last != null ? `${num(f.km_since_last)} km` : DASH}</td>
+                <td class="r">{f.km_since_last != null ? `${num(toUnit(f.km_since_last, prefs.distance))} ${distUnit(prefs.distance)}` : DASH}</td>
                 <td class="r">{f.economy_l100 != null ? `${economy(f.economy_l100, prefs.economy)}` : DASH}</td>
               </tr>
             {/each}

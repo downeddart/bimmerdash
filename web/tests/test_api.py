@@ -196,3 +196,26 @@ def test_tidy_name():
     assert tidy_name("SAINSBURYS TEAM VALLEY") == "Sainsburys Team Valley"
     assert tidy_name("Falcon Service Station") == "Falcon Service Station"
     assert tidy_name("ESSO OF THE NORTH") == "Esso of the North"
+
+
+def test_settings_round_trip(client):
+    s = client.get("/api/settings").json()
+    assert s["global"] == {"distance_unit": "mi", "economy_unit": "mpg"}
+    assert s["vehicles"][VIN]["fuel_grade"] is None
+
+    s = client.put("/api/settings", json={"distance_unit": "km"}).json()
+    assert s["global"] == {"distance_unit": "km", "economy_unit": "mpg"}
+    assert client.put("/api/settings", json={"distance_unit": "furlongs"}).status_code == 422
+
+    s = client.put(
+        f"/api/vehicles/{VIN}/settings", json={"fuel_grade": "E5", "tank_litres": 59}
+    ).json()
+    assert s["vehicles"][VIN]["fuel_grade"] == "E5" and s["vehicles"][VIN]["tank_litres"] == 59
+    # The nearby-prices grade follows the setting straight away.
+    assert client.get(f"/api/vehicles/{VIN}/fuel/nearby").json()["grade"] == "E5"
+    s = client.put(f"/api/vehicles/{VIN}/settings", json={"tank_litres": 0}).json()
+    assert s["vehicles"][VIN]["tank_litres"] is None
+    bad = client.put(f"/api/vehicles/{VIN}/settings", json={"fuel_grade": "LPG"})
+    assert bad.status_code == 422
+    other = client.put("/api/vehicles/WBA0000000OTHER00/settings", json={"fuel_grade": "E5"})
+    assert other.status_code == 404

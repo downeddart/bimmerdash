@@ -25,6 +25,7 @@ def db():
         "002_fuel_prices",
         "003_uk_average_prices",
         "004_trips_fillups",
+        "005_settings",
     ]
     yield d
     d.close()
@@ -182,3 +183,12 @@ def test_rebuild_derives_trips_and_fillups(db):
     assert q(db, "SELECT fuel_grade, fuel_kind FROM vehicles") == [("E10", "petrol")]
     assert rebuild(db, VIN) == (1, 1)  # rebuilding replaces, never duplicates
     assert q(db, "SELECT count(*) FROM fillups")[0][0] == 1
+
+    # A grade chosen in the web UI wins; with no E5 price there, it falls back to... nothing
+    # (no UK averages loaded in this test), so the cost is unknown rather than wrong.
+    db.conn.execute(
+        "INSERT INTO settings (scope, key, value) VALUES (%s, 'fuel_grade', '\"E5\"')", (VIN,)
+    )
+    db.conn.commit()
+    rebuild(db, VIN)
+    assert q(db, "SELECT fuel_grade, price_source, cost_gbp FROM fillups") == [("E5", None, None)]

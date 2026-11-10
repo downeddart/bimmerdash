@@ -375,6 +375,24 @@ def _pos_json(p: Position | None):
     return None if p is None else [round(p.lat, 6), round(p.lon, 6)]
 
 
+def vehicle_settings(conn, vin: str) -> dict:
+    """Settings chosen in the web UI for this car (they win over environment variables)."""
+    if not conn.execute("SELECT to_regclass('settings') IS NOT NULL").fetchone()[0]:
+        return {}
+    rows = conn.execute("SELECT key, value FROM settings WHERE scope = %s", (vin,)).fetchall()
+    return {k: v for k, v in rows if v is not None}
+
+
+def settings_changed_at(db):
+    """When any setting last changed, so the collector can recalculate promptly."""
+    row = db.conn.execute(
+        "SELECT CASE WHEN to_regclass('settings') IS NOT NULL"
+        " THEN (SELECT max(updated_at) FROM settings) END"
+    ).fetchone()
+    db.conn.commit()
+    return row[0]
+
+
 def rebuild(db, vin: str, now: datetime | None = None) -> tuple[int, int]:
     """Recompute trips and fill-ups for one car and replace the stored ones."""
     now = now or datetime.now(UTC)
@@ -382,9 +400,16 @@ def rebuild(db, vin: str, now: datetime | None = None) -> tuple[int, int]:
     data = _load(conn, vin)
     basic = conn.execute("SELECT basic_data FROM vehicles WHERE vin = %s", (vin,)).fetchone()
     kind = fuel_kind(basic[0] if basic else None)
-    grade = os.environ.get("BIMMERDASH_FUEL_GRADE", "").strip().upper() or DEFAULT_GRADE[kind]
+    chosen = vehicle_settings(conn, vin)
+    grade = (
+        chosen.get("fuel_grade")
+        or os.environ.get("BIMMERDASH_FUEL_GRADE", "").strip().upper()
+        or DEFAULT_GRADE[kind]
+    )
     kind = GRADE_KIND.get(grade, kind)
-    capacity = float(os.environ.get("BIMMERDASH_TANK_LITRES", 0) or 0) or None
+    capacity = (
+        chosen.get("tank_litres") or float(os.environ.get("BIMMERDASH_TANK_LITRES", 0) or 0) or None
+    )
     conn.commit()
 
     odometer = Series([(t, float(v)) for t, v in data[ODOMETER] if v is not None])

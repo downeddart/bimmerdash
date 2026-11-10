@@ -68,3 +68,23 @@ export function economy(l100, unit) {
   return unit === 'mpg' ? nf1.format(282.481 / l100) : nf1.format(l100);
 }
 export const economyUnit = (unit) => (unit === 'mpg' ? 'mpg (UK)' : 'L/100 km');
+
+// Distances are stored in km; show them in the chosen unit.
+const KM_PER_MI = 1.609344;
+export const distUnit = (u) => (u === 'mi' ? 'mi' : 'km');
+export const speedUnit = (u) => (u === 'mi' ? 'mph' : 'km/h');
+export function toUnit(km, u) {
+  return km == null ? null : u === 'mi' ? km / KM_PER_MI : km;
+}
+export function dist(km, u, decimals = 0) {
+  return km == null ? DASH : num(toUnit(km, u), decimals);
+}
+// A value the car reported with its own unit (normally km).
+export function measure(m, u) {
+  if (!m) return DASH;
+  const isKm = !m.unit || m.unit === 'km';
+  return isKm ? `${dist(m.value, u)} ${distUnit(u)}` : `${num(m.value)} ${m.unit}`;
+}
+export function perDistance(pencePerKm, u) {
+  return pencePerKm == null ? null : u === 'mi' ? pencePerKm * KM_PER_MI : pencePerKm;
+}

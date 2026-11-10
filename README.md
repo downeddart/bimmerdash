@@ -22,6 +22,7 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - [ ] Mileage and usage analytics (annual projection, when/where you drive)
 - [x] Web UI: overview with your car's picture, raw data explorer (dark, mobile-friendly)
 - [x] Web UI: trips and fuel pages, with maps
+- [x] Settings: miles or km, mpg or L/100 km, fuel grade (E10, E5, diesel)
 - [ ] Web UI: insights page
 - [ ] Pushover alerts (left unlocked, low fuel, service due, stream silent)
 

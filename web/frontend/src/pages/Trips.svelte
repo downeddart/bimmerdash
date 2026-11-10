@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { num, dateTime, time, duration, economy, economyUnit, DASH } from '../lib/format.js';
+  import { num, dateTime, time, duration, economy, economyUnit, DASH, toUnit, distUnit, speedUnit } from '../lib/format.js';
   import { prefs } from '../lib/prefs.svelte.js';
   import MapView from '../components/MapView.svelte';
 
@@ -32,8 +32,10 @@
   );
 
   function km(v) {
-    return v == null ? DASH : v < 1 ? '< 1' : num(v, v < 10 ? 1 : 0);
+    const d = toUnit(v, prefs.distance);
+    return d == null ? DASH : d < 1 ? '< 1' : num(d, d < 10 ? 1 : 0);
   }
+  const unit = $derived(distUnit(prefs.distance));
 
   onMount(() => {
     api.trips(vehicle.vin).then((d) => (data = d)).catch((e) => (error = e.message));
@@ -53,7 +55,7 @@
   <div class="muted">Loading…</div>
 {:else}
   <div class="grid" style="--min: 150px">
-    <div class="card tile"><span class="muted">This month</span><span class="num tile-v">{num(s?.month_km)} <span class="unit">km</span></span></div>
+    <div class="card tile"><span class="muted">This month</span><span class="num tile-v">{num(toUnit(s?.month_km, prefs.distance))} <span class="unit">{unit}</span></span></div>
     <div class="card tile"><span class="muted">Trips</span><span class="num tile-v">{num(s?.month_trips)}</span></div>
     <div class="card tile"><span class="muted">Time driving</span><span class="num tile-v">{duration(s?.month_minutes)}</span><span class="small muted">door open to locked</span></div>
     <div class="card tile">
@@ -74,7 +76,7 @@
         {#each trips as t, i}
           <button class="row" class:active={i === selected} onclick={() => (selected = i)} role="listitem" aria-current={i === selected}>
             <span class="when">{dateTime(t.start_time)}</span>
-            <span class="km num">{km(t.distance_km)} km</span>
+            <span class="km num">{km(t.distance_km)} {unit}</span>
             <span class="small muted">{duration(t.minutes)}{t.fuel_used_l != null ? ` · ${num(t.fuel_used_l)} L` : ''}</span>
           </button>
         {/each}
@@ -95,13 +97,13 @@
             <div class="nomap muted small">No position was reported for this trip.</div>
           {/if}
           <div class="stats">
-            <div><span class="muted small">Distance</span><span class="num">{km(trip.distance_km)} km</span></div>
+            <div><span class="muted small">Distance</span><span class="num">{km(trip.distance_km)} {unit}</span></div>
             <div><span class="muted small">Duration</span><span class="num">{duration(trip.minutes)}</span></div>
-            <div><span class="muted small">Avg speed</span><span class="num">{speed ? `${num(speed)} km/h` : DASH}</span></div>
+            <div><span class="muted small">Avg speed</span><span class="num">{speed ? `${num(toUnit(speed, prefs.distance))} ${speedUnit(prefs.distance)}` : DASH}</span></div>
             <div><span class="muted small">Fuel used</span><span class="num">{trip.fuel_used_l != null ? `${num(trip.fuel_used_l)} L` : DASH}</span></div>
-            <div><span class="muted small">Odometer</span><span class="num">{trip.end_odometer != null ? num(trip.end_odometer) : DASH}</span></div>
+            <div><span class="muted small">Odometer</span><span class="num">{trip.end_odometer != null ? `${num(toUnit(trip.end_odometer, prefs.distance))} ${unit}` : DASH}</span></div>
           </div>
-          {#if trip.fuel_used_l != null && trip.distance_km < 30}
+          {#if trip.fuel_used_l != null && trip.distance_km < 50}
             <div class="small muted">Fuel is reported in whole litres, so short trips are rough.</div>
           {/if}
         </div>

@@ -256,6 +256,12 @@ def nearby_prices(conn: psycopg.Connection, vin: str, radius_km: float = 5, limi
 
 
 def _grade(conn: psycopg.Connection, vin: str) -> str:
+    if conn.execute("SELECT to_regclass('settings') IS NOT NULL").fetchone()[0]:
+        row = conn.execute(
+            "SELECT value #>> '{}' FROM settings WHERE scope = %s AND key = 'fuel_grade'", (vin,)
+        ).fetchone()
+        if row and row[0]:
+            return row[0]
     has_col = conn.execute(
         "SELECT 1 FROM information_schema.columns"
         " WHERE table_name = 'vehicles' AND column_name = 'fuel_grade'"

@@ -1,20 +1,42 @@
-// Per-browser display preferences. Storage can be unavailable (private windows), so
-// everything falls back to defaults.
-function read(key, fallback) {
+// Display settings, shared by everyone via the server. A local copy avoids a flash of
+// the wrong units on load; storage can be unavailable, so that is best-effort.
+import { api } from './api.js';
+
+const CACHE = 'bimmerdash.prefs';
+
+function cached() {
   try {
-    return localStorage.getItem(`bimmerdash.${key}`) ?? fallback;
+    return JSON.parse(localStorage.getItem(CACHE)) ?? {};
   } catch {
-    return fallback;
+    return {};
   }
 }
 
-export const prefs = $state({ economy: read('economy', 'mpg') });
+export const prefs = $state({ distance: 'mi', economy: 'mpg', ...cached() });
 
-export function setEconomyUnit(unit) {
-  prefs.economy = unit;
+function remember() {
   try {
-    localStorage.setItem('bimmerdash.economy', unit);
+    localStorage.setItem(CACHE, JSON.stringify({ distance: prefs.distance, economy: prefs.economy }));
   } catch {
-    /* not persisted */
+    /* not cached */
   }
 }
+
+function apply(s) {
+  prefs.distance = s.global.distance_unit;
+  prefs.economy = s.global.economy_unit;
+  remember();
+  return s;
+}
+
+export async function loadSettings() {
+  return apply(await api.settings());
+}
+
+export async function saveGlobal(patch) {
+  if (patch.distance_unit) prefs.distance = patch.distance_unit;
+  if (patch.economy_unit) prefs.economy = patch.economy_unit;
+  return apply(await api.putSettings(patch));
+}
+
+export const setEconomyUnit = (unit) => saveGlobal({ economy_unit: unit });

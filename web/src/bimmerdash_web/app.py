@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 
-from . import derived, queries
+from . import derived, queries, settings
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
@@ -90,6 +90,26 @@ def create_app(database_url: str | None = None) -> FastAPI:
     def nearby(vin: str, radius_km: float = 5):
         with pool.connection() as conn:
             return derived.nearby_prices(conn, vin_or_404(vin), max(0.5, min(radius_km, 30)))
+
+    @app.get("/api/settings")
+    def get_settings():
+        with pool.connection() as conn:
+            return settings.get_all(conn)
+
+    @app.put("/api/settings")
+    def put_settings(body: settings.GlobalSettings):
+        with pool.connection() as conn:
+            settings.save(conn, "global", body.model_dump())
+            return settings.get_all(conn)
+
+    @app.put("/api/vehicles/{vin}/settings")
+    def put_vehicle_settings(vin: str, body: settings.VehicleSettings):
+        with pool.connection() as conn:
+            vin_or_404(vin)
+            if not conn.execute("SELECT 1 FROM vehicles WHERE vin = %s", (vin,)).fetchone():
+                raise HTTPException(404, "unknown vehicle")
+            settings.save(conn, vin, body.model_dump())
+            return settings.get_all(conn)
 
     # Single-page app: real files from the build, everything else falls back to index.html.
     if (STATIC_DIR / "index.html").exists():
