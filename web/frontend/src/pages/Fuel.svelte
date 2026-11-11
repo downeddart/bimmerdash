@@ -8,6 +8,7 @@
   let { vehicle } = $props();
   let data = $state(null);
   let nearby = $state(null);
+  let advice = $state(null);
   let error = $state(null);
 
   const s = $derived(data?.summary);
@@ -44,11 +45,38 @@
   );
 
   const isAvg = (f) => f.price_source === 'uk_average';
+  const ce = $derived(data?.car_economy);
+  // Best economy figure: the car's own counters, else fill-to-fill.
+  const econ = $derived(
+    ce?.recent_l100
+      ? { l100: ce.recent_l100, note: `car's own figure, last ${num(toUnit(ce.recent_km, prefs.distance))} ${distUnit(prefs.distance)}` }
+      : s?.economy_l100
+        ? { l100: s.economy_l100, note: `last ${s.economy_intervals} fill-up${s.economy_intervals > 1 ? 's' : ''}` }
+        : ce?.lifetime_l100
+          ? { l100: ce.lifetime_l100, note: `car's lifetime figure, ${num(toUnit(ce.lifetime_km, prefs.distance))} ${distUnit(prefs.distance)}` }
+          : null
+  );
+  const adviceMarkers = $derived(
+    !advice?.position
+      ? []
+      : [
+          ...advice.stations.map((x) => ({
+            lat: x.lat,
+            lon: x.lon,
+            colour: x === advice.stations[0] ? '#3dd68c' : '#5aa2ff',
+            radius: x === advice.stations[0] ? 8 : 6,
+            label: `${x.name} · ${num(x.price, 1)}p`,
+          })),
+          { lat: advice.position.lat, lon: advice.position.lon, colour: '#e6e8eb', radius: 7, label: 'Your car' },
+        ]
+  );
+  const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups', assumed: 'a typical figure until the car reports its own' };
   const SOURCE = { station: 'station price', receipt: 'receipt', uk_average: 'UK avg' };
 
   onMount(() => {
     api.fuel(vehicle.vin).then((d) => (data = d)).catch((e) => (error = e.message));
     api.nearby(vehicle.vin).then((d) => (nearby = d)).catch(() => (nearby = { stations: [] }));
+    api.advisor(vehicle.vin).then((d) => (advice = d)).catch(() => (advice = null));
   });
 </script>
 
@@ -68,11 +96,45 @@
 {:else if !data}
   <div class="muted">Loading…</div>
 {:else}
+  {#if advice?.best}
+    {@const b = advice.best}
+    {@const n = advice.nearest}
+    <section class="card advisor">
+      <div class="adv-text">
+        <div class="eyebrow plain">Where to fill up next</div>
+        <h2 class="adv-title">{b.name}</h2>
+        <div class="muted">
+          {num(b.price, 1)}p/L · {num(toUnit(b.distance_km, prefs.distance), 1)} {distUnit(prefs.distance)} from the car{b.brand && b.brand !== b.name ? ` · ${b.brand}` : ''}
+        </div>
+        <div class="adv-facts">
+          <div>
+            <span class="small muted">{advice.fill_litres ? `Filling ${num(advice.fill_litres)} L` : `A ${num(advice.litres_compared)} L top-up`}</span>
+            <span class="num mid">{money(b.fill_cost)}</span>
+          </div>
+          <div>
+            <span class="small muted">Saving vs nearest</span>
+            <span class="num mid" class:good={b.saving > 0.05}>{b.node_id === n.node_id ? 'Nearest is best' : money(b.saving)}</span>
+          </div>
+          <div>
+            <span class="small muted">In the tank</span>
+            <span class="num mid">{advice.fuel.percent != null ? `${num(advice.fuel.percent)}%` : DASH}</span>
+          </div>
+        </div>
+        <p class="small muted">
+          {#if b.node_id !== n.node_id}Nearest is {n.name} at {num(n.price, 1)}p, {num(toUnit(n.distance_km, prefs.distance), 1)} {distUnit(prefs.distance)} away. {/if}
+          Counts the fuel to drive there and back ({money(b.detour_cost)}), using {ECON_SOURCE[advice.economy.source]}.
+          Stations within {num(toUnit(advice.radius_km, prefs.distance))} {distUnit(prefs.distance)}.
+        </p>
+      </div>
+      <div class="adv-map"><MapView markers={adviceMarkers} height={260} label="Stations near the car" /></div>
+    </section>
+  {/if}
+
   <div class="grid" style="--min: 150px">
     <div class="card tile">
-      <span class="muted">Average economy</span>
-      <span class="num tile-v">{economy(s?.economy_l100, prefs.economy)} <span class="unit">{economyUnit(prefs.economy)}</span></span>
-      <span class="small muted">{s?.economy_intervals ? `last ${s.economy_intervals} fill-up${s.economy_intervals > 1 ? 's' : ''}` : 'after your second fill-up'}</span>
+      <span class="muted">Economy</span>
+      <span class="num tile-v">{economy(econ?.l100, prefs.economy)} <span class="unit">{economyUnit(prefs.economy)}</span></span>
+      <span class="small muted">{econ?.note ?? 'after the car reports its fuel use, or your second fill-up'}</span>
     </div>
     <div class="card tile">
       <span class="muted">Spent this month</span>
@@ -91,7 +153,7 @@
     <div class="card tile">
       <span class="muted">Fuel cost per {prefs.distance === 'mi' ? 'mile' : 'km'}</span>
       <span class="num tile-v">{s?.pence_per_km != null ? `${num(perDistance(s.pence_per_km, prefs.distance), 1)}p` : DASH}</span>
-      <span class="small muted">{s?.avg_price_ppl ? `at ${num(s.avg_price_ppl, 1)}p/L recently` : 'needs economy and prices'}</span>
+      <span class="small muted">{s?.avg_price_ppl ? `at ${num(s.avg_price_ppl, 1)}p/L ${s.price_basis === 'local' ? 'near home' : s.price_basis === 'uk_average' ? '(UK average)' : 'recently'}` : 'needs economy and prices'}</span>
     </div>
   </div>
 
@@ -209,6 +271,15 @@
   .seg button.on { background: var(--card-3); color: var(--text); }
   .tile { display: flex; flex-direction: column; gap: 6px; padding: 20px; }
   .tile-v { font-size: 26px; }
+  .advisor { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) { .advisor { grid-template-columns: 1fr; } }
+  .adv-text { display: flex; flex-direction: column; gap: 8px; }
+  .adv-title { font-family: var(--display); font-size: 26px; }
+  .adv-facts { display: flex; flex-wrap: wrap; gap: 24px; margin: 10px 0 4px; }
+  .adv-facts > div { display: flex; flex-direction: column; gap: 2px; }
+  .mid { font-size: 22px; }
+  .good { color: var(--ok); }
+  .adv-text p { margin: 4px 0 0; }
   .est { color: var(--warn); }
   .est-bg { background: var(--warn); }
   .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; background: #2a2212; color: var(--warn); font-size: 11px; font-weight: 600; }

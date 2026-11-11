@@ -43,6 +43,8 @@ export const api = {
   fuel: (vin) => get(`/vehicles/${vin}/fuel`),
   nearby: (vin, km = 5) => get(`/vehicles/${vin}/fuel/nearby?radius_km=${km}`),
   usage: (vin) => get(`/vehicles/${vin}/usage`),
+  health: (vin) => get(`/vehicles/${vin}/health`),
+  advisor: (vin) => get(`/vehicles/${vin}/fuel/advisor`),
   places: () => get('/places'),
   addPlace: (place) => post('/places', place),
   renamePlace: (id, name) => put(`/places/${id}`, { name }),

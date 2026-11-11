@@ -11,6 +11,14 @@
   let weeks = $state([]);
   let imageOk = $state(true);
   let places = $state([]);
+  let health = $state(null);
+  const nextService = $derived(health?.services?.find((x) => x.due) ?? null);
+  const healthText = $derived.by(() => {
+    if (!health) return null;
+    if (health.issues) return `${health.issues} to check`;
+    if (health.due_soon) return 'Service due soon';
+    return 'All good';
+  });
   const here = $derived(o?.location ? placeAt(places, o.location) : null);
 
   const name = $derived([vehicle.model_name, vehicle.body_type].filter(Boolean).join(' ') || 'Your car');
@@ -35,12 +43,14 @@
           { label: 'Boot', value: o.trunk_open == null ? null : o.trunk_open ? 'Open' : 'Closed', good: o.trunk_open === false },
           {
             label: 'Tyres',
+            // psi, front left / front right / rear left / rear right
             value: o.tyres
               ? ['front_left', 'front_right', 'rear_left', 'rear_right']
-                  .map((p) => (o.tyres[p] ? num(o.tyres[p].value, 1) : DASH))
-                  .join(' · ') + (Object.values(o.tyres).find(Boolean)?.unit ? ` ${Object.values(o.tyres).find(Boolean).unit}` : '')
+                  .map((p) => (o.tyres[p] ? num(o.tyres[p].value * 0.145038) : DASH))
+                  .join(' · ') + ' psi'
               : null,
-            good: o.tyres ? true : null,
+            good: o.tyres ? !['low', 'very_low'].includes(health?.tyres?.state) : null,
+            raw: true,
           },
           {
             label: 'Check control',
@@ -60,6 +70,7 @@
     o = ov;
     weeks = wk;
     api.places().then((p) => (places = p)).catch(() => {});
+    api.health(vehicle.vin).then((x) => (health = x)).catch(() => {});
   }
 
   onMount(() => {
@@ -132,7 +143,11 @@
 
   <section class="grid" aria-label="Key stats">
     <div class="card tile"><span class="muted">This week</span><span class="num tile-v">{thisWeek != null ? `${dist(thisWeek, prefs.distance)} ${distUnit(prefs.distance)}` : DASH}</span><span class="small muted">from odometer</span></div>
-    <div class="card tile"><span class="muted">Next service</span><span class="num tile-v">{measure(o.service_distance, prefs.distance)}</span><span class="small muted">distance remaining</span></div>
+    <a class="card tile link" href="#/health">
+      <span class="muted">Health</span>
+      <span class="num tile-v" style:color={health?.issues ? 'var(--warn)' : undefined}>{healthText ?? DASH}</span>
+      <span class="small muted">{nextService ? `${nextService.name} ${new Date(nextService.due).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : `next service ${measure(o.service_distance, prefs.distance)}`}</span>
+    </a>
     <div class="card tile"><span class="muted">Odometer</span><span class="num tile-v">{o.odometer ? dist(o.odometer.value, prefs.distance) : DASH}</span><span class="small muted">{distUnit(prefs.distance)}</span></div>
     <div class="card tile"><span class="muted">Status</span><span class="num tile-v">{o.is_moving ? 'Moving' : 'Parked'}</span><span class="small muted">updated {ago(o.updated_at)}</span></div>
   </section>
@@ -161,7 +176,7 @@
         {#each statusItems as s}
           <div class="status-item">
             <span class="dot" style:background={s.value == null ? '#4b5563' : s.good ? 'var(--ok)' : 'var(--warn)'}></span>
-            <div><span class="small muted">{s.label}</span><span class="status-v">{s.value == null ? 'Not reported yet' : title(s.value)}</span></div>
+            <div><span class="small muted">{s.label}</span><span class="status-v">{s.value == null ? 'Not reported yet' : s.raw ? s.value : title(s.value)}</span></div>
           </div>
         {/each}
       </div>
@@ -200,6 +215,8 @@
 
   .tile { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 16px; }
   .tile-v { font-size: 26px; }
+  a.tile { color: var(--text); }
+  a.tile:hover { border-color: var(--line-2); }
 
   .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 20px; }
   .bars { display: flex; align-items: flex-end; gap: 10px; height: 170px; }

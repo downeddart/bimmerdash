@@ -36,6 +36,32 @@
   let error = $state(null);
   let saved = $state(null); // which section last saved, for the confirmation
   let tankInput = $state('');
+  let limitInput = $state('');
+  let limitStart = $state('');
+  let pushover = $state(null);
+  const KM_PER_MI = 1.609344;
+  const al = $derived(all?.global?.alerts);
+  const ALERTS = [
+    ['left_open', 'Left unlocked or open', 'Doors, windows, boot or bonnet, once the car has been parked a while'],
+    ['low_fuel', 'Fuel low', 'With the cheapest station near the car'],
+    ['tyres', 'Tyre pressure low', "Below the car's own target pressure"],
+    ['service', 'Service or MOT due', 'Shortly before the due date'],
+    ['warnings', 'Warning lights', 'Any Check Control message from the car'],
+  ];
+
+  function setAlerts(patch) {
+    setGlobal({ alerts: patch }, 'alerts');
+  }
+
+  function saveLimit() {
+    const v = limitInput === '' ? 0 : Number(limitInput);
+    if (Number.isNaN(v) || v < 0 || v > 100000) {
+      error = 'Mileage limit must be between 0 and 100,000.';
+      return;
+    }
+    const km = prefs.distance === 'mi' ? v * KM_PER_MI : v;
+    setVehicle({ mileage_limit_km: Math.round(km), mileage_year_start: limitStart || '' });
+  }
 
   const car = $derived(vehicle ? all?.vehicles?.[vehicle.vin] : null);
   const carName = $derived(vehicle ? [vehicle.model_name, vehicle.body_type].filter(Boolean).join(' ') || 'Your car' : '');
@@ -44,6 +70,12 @@
   // Vehicles can load after this page mounts.
   $effect(() => {
     if (car?.tank_litres != null && tankInput === '') tankInput = car.tank_litres;
+  });
+  $effect(() => {
+    if (car?.mileage_limit_km && limitInput === '') {
+      limitInput = Math.round(prefs.distance === 'mi' ? car.mileage_limit_km / KM_PER_MI : car.mileage_limit_km);
+    }
+    if (car?.mileage_year_start && limitStart === '') limitStart = car.mileage_year_start;
   });
 
   function flash(section) {
@@ -84,6 +116,7 @@
     try {
       all = await loadSettings();
       tankInput = all.vehicles?.[vehicle?.vin]?.tank_litres ?? '';
+      if (vehicle) api.health(vehicle.vin).then((h) => (pushover = h.alerts.pushover)).catch(() => {});
     } catch (e) {
       error = e.message;
     }
@@ -167,6 +200,57 @@
           <button class="btn" onclick={saveTank}>Save</button>
         </div>
       </div>
+
+      <div class="field">
+        <label for="limit">
+          <div class="label">Yearly mileage limit</div>
+          <div class="small muted">From your insurance, PCP or lease. Insights tracks how you're doing against it. Leave empty for none.</div>
+        </label>
+        <div class="inline wrap">
+          <input id="limit" class="wide" type="number" inputmode="numeric" min="0" step="500" placeholder="none" bind:value={limitInput} />
+          <span class="muted">{prefs.distance === 'mi' ? 'mi' : 'km'} a year from</span>
+          <input class="date" type="date" aria-label="Start of the mileage year" bind:value={limitStart} />
+          <button class="btn" onclick={saveLimit}>Save</button>
+        </div>
+      </div>
+    </section>
+  {/if}
+
+  {#if al}
+    <section class="card">
+      <div class="head">
+        <h2>Alerts</h2>
+        {#if saved === 'alerts'}<span class="ok small" role="status">Saved</span>{/if}
+      </div>
+      <p class="muted small">
+        {#if pushover}Sent to your phone with Pushover, and listed on the Health page.
+        {:else if pushover === false}Listed on the Health page. To get them on your phone, add <code>BIMMERDASH_PUSHOVER_TOKEN</code> and <code>BIMMERDASH_PUSHOVER_USER</code> to <code>.env</code>.
+        {:else}Listed on the Health page, and sent with Pushover if it's set up.{/if}
+      </p>
+
+      <div class="field">
+        <div><div class="label">Alerts</div><div class="small muted">Turn all of them off or on</div></div>
+        <label class="switch"><input type="checkbox" checked={al.enabled} onchange={(e) => setAlerts({ enabled: e.currentTarget.checked })} /><span>{al.enabled ? 'On' : 'Off'}</span></label>
+      </div>
+      {#each ALERTS as [key, label, hint]}
+        <div class="field" class:dim={!al.enabled}>
+          <div><div class="label">{label}</div><div class="small muted">{hint}</div></div>
+          <div class="inline">
+            {#if key === 'low_fuel'}
+              <span class="small muted">below</span>
+              <select class="narrow" value={al.low_fuel_percent} onchange={(e) => setAlerts({ low_fuel_percent: Number(e.currentTarget.value) })} aria-label="Fuel level threshold">
+                {#each [10, 15, 20, 25, 30, 40] as p}<option value={p}>{p}%</option>{/each}
+              </select>
+            {:else if key === 'left_open'}
+              <span class="small muted">after</span>
+              <select class="narrow" value={al.left_open_minutes} onchange={(e) => setAlerts({ left_open_minutes: Number(e.currentTarget.value) })} aria-label="Minutes parked before alerting">
+                {#each [5, 10, 15, 30, 60] as m}<option value={m}>{m} min</option>{/each}
+              </select>
+            {/if}
+            <label class="switch"><input type="checkbox" checked={al[key]} disabled={!al.enabled} onchange={(e) => setAlerts({ [key]: e.currentTarget.checked })} aria-label={label} /><span>{al[key] ? 'On' : 'Off'}</span></label>
+          </div>
+        </div>
+      {/each}
     </section>
   {/if}
 
@@ -221,5 +305,14 @@
   .pw label { display: flex; flex-direction: column; gap: 6px; }
   .pw input { width: 100%; }
   .bad { color: #ffb4b4; }
+  .inline.wrap { flex-wrap: wrap; }
+  input.wide { width: 110px; }
+  input.date { width: auto; }
+  select.narrow { min-width: 96px; }
+  .field label.switch { flex: none; }
+  .dim { opacity: 0.55; }
+  .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-height: 42px; }
+  .switch input { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: var(--accent); }
+  .switch span { min-width: 26px; font-size: 13px; color: var(--muted); }
   code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
 </style>
