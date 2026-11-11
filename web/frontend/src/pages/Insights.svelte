@@ -108,10 +108,7 @@
 </script>
 
 <header>
-  <div>
-    <div class="eyebrow plain">Mileage and usage</div>
-    <h1>Insights</h1>
-  </div>
+  <h1>Insights</h1>
 </header>
 
 {#if error}
@@ -119,28 +116,28 @@
 {:else if !data}
   <div class="muted">Loading…</div>
 {:else}
-  <div class="grid" style="--min: 160px">
-    <div class="card tile wide">
-      <span class="muted">Estimated annual mileage</span>
-      <span class="num tile-v">{perYear != null ? num(perYear) : DASH} <span class="unit">{unit} / year</span></span>
-      <span class="small muted">{basis(m)}</span>
+  <section class="strip boxed" aria-label="Mileage summary">
+    <div class="readout">
+      <span class="label">Estimated annual mileage</span>
+      <span class="value">{perYear != null ? num(perYear) : DASH}<span class="unit">{unit} / year</span></span>
+      <span class="note">{basis(m)}</span>
     </div>
-    <div class="card tile">
-      <span class="muted">Odometer</span>
-      <span class="num tile-v">{m?.odometer_km != null ? num(toUnit(m.odometer_km, prefs.distance)) : DASH} <span class="unit">{unit}</span></span>
-      <span class="small muted">{m?.built ? `built ${longDate(m.built)}` : ''}</span>
+    <div class="readout">
+      <span class="label">Odometer</span>
+      <span class="value">{m?.odometer_km != null ? num(toUnit(m.odometer_km, prefs.distance)) : DASH}<span class="unit">{unit}</span></span>
+      <span class="note">{m?.built ? `built ${longDate(m.built)}` : ''}</span>
     </div>
-    <div class="card tile">
-      <span class="muted">{s?.trips_per_week != null ? 'Trips per week' : 'Trips recorded'}</span>
-      <span class="num tile-v">{s ? num(s.trips_per_week ?? s.trips, s.trips_per_week != null ? 1 : 0) : DASH}</span>
-      <span class="small muted">{s?.avg_trip_km != null ? `average ${num(toUnit(s.avg_trip_km, prefs.distance), 1)} ${unit}` : 'no trips yet'}</span>
+    <div class="readout">
+      <span class="label">{s?.trips_per_week != null ? 'Trips per week' : 'Trips recorded'}</span>
+      <span class="value">{s ? num(s.trips_per_week ?? s.trips, s.trips_per_week != null ? 1 : 0) : DASH}</span>
+      <span class="note">{s?.avg_trip_km != null ? `average ${num(toUnit(s.avg_trip_km, prefs.distance), 1)} ${unit}` : 'no trips yet'}</span>
     </div>
-    <div class="card tile">
-      <span class="muted">Short trips</span>
-      <span class="num tile-v">{s?.short_trip_share != null ? `${num(s.short_trip_share * 100)}%` : DASH}</span>
-      <span class="small muted">under {shortLimit}: the engine rarely warms up</span>
+    <div class="readout">
+      <span class="label">Short trips</span>
+      <span class="value">{s?.short_trip_share != null ? `${num(s.short_trip_share * 100)}%` : DASH}</span>
+      <span class="note">under {shortLimit}: the engine rarely warms up</span>
     </div>
-  </div>
+  </section>
 
   <div class="card">
     <div class="card-head">
@@ -150,11 +147,11 @@
     {#if !c?.pence_per_km}
       <p class="muted">Needs the car's fuel figures (from BMW, within a few hours) or two fill-ups, plus fuel prices.</p>
     {:else}
-      <div class="costs">
-        <div><span class="small muted">Per month</span><span class="num tile-v">{c.cost_per_month != null ? pounds(c.cost_per_month) : DASH}</span></div>
-        <div><span class="small muted">Per year</span><span class="num tile-v">{c.cost_per_year != null ? pounds(c.cost_per_year) : DASH}</span></div>
-        <div><span class="small muted">Per {prefs.distance === 'mi' ? 'mile' : 'km'}</span><span class="num tile-v">{num(perDistance(c.pence_per_km, prefs.distance), 1)}p</span></div>
-        <div><span class="small muted">Fuel a year</span><span class="num tile-v">{c.litres_per_year != null ? `${num(c.litres_per_year)} L` : DASH}</span></div>
+      <div class="strip boxed costs">
+        <div class="readout"><span class="label">Per month</span><span class="value">{c.cost_per_month != null ? pounds(c.cost_per_month) : DASH}</span></div>
+        <div class="readout"><span class="label">Per year</span><span class="value">{c.cost_per_year != null ? pounds(c.cost_per_year) : DASH}</span></div>
+        <div class="readout"><span class="label">Per {prefs.distance === 'mi' ? 'mile' : 'km'}</span><span class="value">{num(perDistance(c.pence_per_km, prefs.distance), 1)}p</span></div>
+        <div class="readout"><span class="label">Fuel a year</span><span class="value">{c.litres_per_year != null ? num(c.litres_per_year) : DASH}{#if c.litres_per_year != null}<span class="unit">L</span>{/if}</span></div>
       </div>
       <p class="small muted">
         {perYear != null ? `${num(perYear)} ${unit} a year` : 'Your mileage'} at {economy(c.economy_l100, prefs.economy)} {economyUnit(prefs.economy)} ({ECON_SOURCE[c.economy_source]})
@@ -169,9 +166,10 @@
         <h2>Mileage limit</h2>
         <span class="small muted">{longDate(lim.year_start)} – {longDate(lim.year_end)}</span>
       </div>
-      <div class="limit-bar" role="img" aria-label={`Used ${num(limitPct)}% of the yearly limit; projected ${num(projPct)}%`}>
-        <div class="proj" style:width={`${projPct}%`} class:over={lim.on_track === false}></div>
-        <div class="used" style:width={`${limitPct}%`}></div>
+      <div class="gauge limit-bar" role="img" aria-label={`Used ${num(limitPct)}% of the yearly limit; projected ${num(projPct)}%`}>
+        <div class="fill proj" style:width={`${projPct}%`} class:over={lim.on_track === false}></div>
+        <div class="fill used" style:width={`${limitPct}%`}></div>
+        <span class="tick" style:left="25%"></span><span class="tick" style:left="50%"></span><span class="tick" style:left="75%"></span>
       </div>
       <div class="limit-facts">
         <span><strong class="num">{num(toUnit(lim.used_km, prefs.distance))}</strong> <span class="muted">of {num(toUnit(lim.limit_km, prefs.distance))} {unit} used{lim.used_estimated ? ' (partly estimated)' : ''}</span></span>
@@ -193,12 +191,12 @@
           {#each months as x, i}
             <div class="bar-col" role="listitem">
               <span class="sr-only">{monthName(x.month)}: {num(toUnit(x.km, prefs.distance))} {unit}</span>
-              <span class="small muted" aria-hidden="true">{num(toUnit(x.km, prefs.distance))}</span>
-              <div class="bar" aria-hidden="true" style:height={`${Math.max(3, (x.km / maxMonth) * 120)}px`} style:background={i === months.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
-              <span class="small muted" aria-hidden="true">{monthName(x.month)}</span>
+              <span class="bar-v" aria-hidden="true">{num(toUnit(x.km, prefs.distance))}</span>
+              <div class="bar" class:now={i === months.length - 1} aria-hidden="true" style:height={`${Math.max(3, (x.km / maxMonth) * 110)}px`}></div>
             </div>
           {/each}
         </div>
+        <div class="axis" aria-hidden="true">{#each months as x}<span>{monthName(x.month)}</span>{/each}</div>
         {#if m.history_days < 60}
           <p class="small muted">Recording started {longDate(m.history_from)}, so this fills in month by month.</p>
         {/if}
@@ -294,18 +292,10 @@
 
 <style>
   header { display: flex; align-items: flex-end; }
-  .tile { display: flex; flex-direction: column; gap: 6px; padding: 20px; }
-  .tile.wide { grid-column: span 2; }
-  @media (max-width: 520px) { .tile.wide { grid-column: auto; } }
-  .tile-v { font-size: 26px; }
   .two { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; }
-  .bars { display: flex; align-items: flex-end; gap: 8px; height: 180px; }
-  .bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; height: 100%; min-width: 0; }
-  .bar { width: 100%; max-width: 36px; border-radius: 6px 6px 3px 3px; }
   .heat-wrap { overflow-x: auto; }
-  .heat { display: grid; grid-template-columns: 32px repeat(24, minmax(10px, 1fr)); gap: 3px; min-width: 330px; align-items: center; }
-  .cell { aspect-ratio: 1; border-radius: 3px; background: #1a1f27; }
+  .heat { display: grid; grid-template-columns: 32px repeat(24, minmax(10px, 1fr)); gap: 2px; min-width: 330px; align-items: center; }
+  .cell { aspect-ratio: 1; border-radius: 1px; background: var(--card-3); }
   .hh { font-size: 11px; text-align: left; }
   .dd { font-size: 11px; }
   .places { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
@@ -317,10 +307,9 @@
   .actions { display: flex; gap: 6px; }
   .name-form { display: flex; gap: 6px; width: 100%; }
   .name-form input { flex: 1; min-width: 0; }
-  .costs { display: flex; flex-wrap: wrap; gap: 16px 40px; margin-bottom: 8px; }
-  .costs > div { display: flex; flex-direction: column; gap: 4px; }
-  .limit-bar { position: relative; height: 14px; border-radius: 999px; background: var(--card-3); overflow: hidden; margin: 6px 0 12px; }
-  .limit-bar .used, .limit-bar .proj { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+  .costs { margin-bottom: 12px; }
+  .costs > * { background: var(--card-2); padding: 12px 14px; }
+  .limit-bar { height: 10px; margin: 6px 0 12px; }
   .limit-bar .used { background: var(--accent); }
   .limit-bar .proj { background: #2b4a73; }
   .limit-bar .proj.over { background: #6b3a1e; }

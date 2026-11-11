@@ -306,5 +306,5 @@
   .dim { opacity: 0.55; }
   .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-height: 42px; }
   .switch span { min-width: 26px; font-size: 13px; color: var(--muted); }
-  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
+  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 4px; }
 </style>

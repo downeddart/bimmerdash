@@ -201,12 +201,12 @@
     gap: 28px;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; color: var(--text); font-family: var(--display); font-weight: 600; font-size: 19px; }
-  .logo { width: 30px; height: 30px; border-radius: 9px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
   .links { display: flex; flex-direction: column; gap: 4px; }
-  .links a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 10px; color: var(--muted); font-weight: 500; min-height: 44px; }
+  .links a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; min-height: 44px; }
   .links a:hover { color: var(--text); }
   .links a.active { background: var(--card-2); color: var(--text); }
-  .stream { margin-top: auto; padding: 14px; border-radius: 12px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+  .stream { margin-top: auto; padding: 14px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
   .row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
   .row.small { font-size: 12px; font-weight: 400; color: var(--muted); }
   .sep { height: 1px; background: var(--line); margin: 4px 0; }

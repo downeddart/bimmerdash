@@ -57,13 +57,11 @@ typography:
     fontSize: "12px"
     fontWeight: 400
 rounded:
-  xs: "6px"
-  sm: "10px"
-  md: "12px"
-  lg: "16px"
-  xl: "20px"
-  hero: "24px"
-  full: "999px"
+  bar: "2px"
+  xs: "4px"
+  sm: "6px"
+  md: "8px"
+  lg: "12px"
 spacing:
   xs: "4px"
   sm: "8px"
@@ -74,28 +72,27 @@ spacing:
 components:
   card:
     backgroundColor: "{colors.panel}"
-    rounded: "{rounded.xl}"
-    padding: "24px"
-  stat:
-    backgroundColor: "{colors.panel-raised}"
+    rounded: "{rounded.lg}"
+    padding: "20px"
+  readout:
+    backgroundColor: "{colors.panel}"
     textColor: "{colors.headlight-white}"
-    rounded: "{rounded.md}"
-    padding: "12px 14px"
+    padding: "16px 20px"
   button:
     backgroundColor: "{colors.panel-top}"
     textColor: "{colors.headlight-white}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "8px 14px"
     height: "40px"
   button-ghost:
     textColor: "{colors.muted-steel}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "8px 14px"
     height: "40px"
   button-primary:
     backgroundColor: "{colors.dash-blue}"
     textColor: "{colors.garage-floor}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "12px"
     height: "46px"
   button-primary-hover:
@@ -103,37 +100,37 @@ components:
   input:
     backgroundColor: "{colors.garage-floor}"
     textColor: "{colors.headlight-white}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "9px 12px"
     height: "42px"
   segmented:
     backgroundColor: "{colors.garage-floor}"
     textColor: "{colors.muted-steel}"
-    rounded: "{rounded.full}"
+    rounded: "{rounded.md}"
     padding: "3px"
   segmented-on:
     backgroundColor: "{colors.panel-top}"
     textColor: "{colors.headlight-white}"
-    rounded: "{rounded.full}"
+    rounded: "{rounded.sm}"
     padding: "8px 16px"
   pill:
     backgroundColor: "{colors.panel-top}"
-    rounded: "{rounded.full}"
-    padding: "6px 12px"
+    rounded: "{rounded.sm}"
+    padding: "5px 10px"
   pill-ok:
     backgroundColor: "{colors.ok-wash}"
     textColor: "{colors.ok-green}"
-    rounded: "{rounded.full}"
-    padding: "6px 12px"
+    rounded: "{rounded.sm}"
+    padding: "5px 10px"
   tag-estimate:
     backgroundColor: "{colors.amber-wash}"
     textColor: "{colors.amber}"
-    rounded: "{rounded.xs}"
+    rounded: "{rounded.sm}"
     padding: "1px 6px"
   nav-link-active:
     backgroundColor: "{colors.panel-raised}"
     textColor: "{colors.headlight-white}"
-    rounded: "{rounded.sm}"
+    rounded: "{rounded.md}"
     padding: "11px 12px"
     height: "44px"
 ---
@@ -156,10 +153,10 @@ anything wrong) and a desktop review (trips on maps, costs over months). Density
 moderate: a glance has to land in a second, so each card leads with one figure and keeps
 its explanation in a muted line beneath.
 
-The incumbent look is soft: generous rounded cards and tonal layering. The chosen
-direction for new work is **precise and technical**: tighter radii, hairline rules and
-instrument-like detail, applied within the same palette. It is a direction, not yet a
-rebuild; existing cards keep their shape until a deliberate pass changes them.
+The build is **precise and technical**: tight radii (12px cards, 6–8px controls), hairline
+rules between related figures, and instrument-like readouts. Figures that belong together
+sit in one strip divided by hairlines rather than in a row of separate tiles, and each
+figure appears once per page.
 
 Explicitly not a Grafana-style panel grid (owner's requirement): no chart-per-tile walls,
 no default chart palettes, no chrome around every panel.
@@ -239,12 +236,12 @@ self-hosted via Fontsource (Inter 400/500/600, Space Grotesk 500/600).
 
 ### Hierarchy
 - **Display** (600, 34px, -0.02em): page titles only, one per page.
-- **Numeral Large** (600, 26px): the headline figure of a tile.
-- **Numeral** (600, 18–24px): secondary figures in stat blocks and the hero bar.
+- **Numeral Large** (600, 22–28px): the figure in a readout or strip; tyre pressures.
+- **Numeral** (600, 18–20px): figures in compact strips (trip details, advisor).
 - **Title** (600, 16px): card headings.
 - **Body** (400, 14px): base text, list rows, explanations.
-- **Label** (500, 13px, 0.04em, uppercase): eyebrows above titles and tiles; a plain,
-  sentence-case variant is used for page subtitles.
+- **Label** (400, 12px, Muted Steel, sentence case): the name above a readout's figure.
+  Never a kicker above a heading; headings stand alone.
 - **Caption** (400, 12px): sources, timestamps, units of context, in Muted Steel.
 - **Units** are set at 0.55em of their figure, weight 500, Muted Steel, never wrapped.
 
@@ -270,8 +267,8 @@ Interactive targets are at least 40px tall (44px for nav links and login inputs)
 
 Flat. There are no shadows anywhere in the interface; depth is conveyed by tonal
 layering of the neutral ramp plus 1px borders in Rule or Rule Strong. The only
-"lighting" is the car render on the Overview hero, which sits on a slightly bluer ground
-(`#1a2029`) to read as a lit bay.
+"lighting" is the car render on the Overview bay, which sits on a flat, slightly bluer
+ground (`#1a2029`) to read as a lit bay.
 
 ### Named Rules
 **The No-Glow Rule.** No box-shadows, no blurred glows, no gradients behind content. If
@@ -279,22 +276,21 @@ something needs to stand forward, it moves one step up the panel ramp.
 
 ## Shapes
 
-Rounded rectangles throughout, with radius growing with the element: 6px for tags and
-small chips, 10px for buttons, inputs and nav links, 12px for stat blocks and inner
-panels, 16px for tiles, 20px for cards, 24px for the Overview hero, and full pills for
-status pills and segmented controls. Dots are 8px circles. Chart bars have a 6px top and
-3px bottom radius.
+Tight rectangles: 12px for cards, strips and the car bay; 8px for buttons, inputs, nav
+links, maps, wheel readouts and segmented wells; 6px for chips, tags and the selected
+segment; 2px for chart bars (square at the baseline) and gauges; 1px for heatmap cells.
+Dots are 8px circles. Nothing is a full pill.
 
 ### Named Rules
-**The Tighter-Going-Forward Rule.** New components favour the lower end of the scale
-(6–12px) and 1px hairline rules over larger, softer shapes. Do not enlarge radii; when a
-component is reworked, it moves toward precise, not softer.
+**The Precise Rule.** Radii never exceed 12px, and separation comes from 1px hairlines
+before it comes from gaps between boxes. When a component is reworked, it moves toward
+precise, never softer.
 
 ## Components
 
 ### Buttons
 Quiet, bordered, and small; the interface has almost no loud buttons.
-- **Shape:** gently rounded (10px), at least 40px tall, 13px text.
+- **Shape:** 8px radius, at least 40px tall, 13px text.
 - **Default:** Panel Top fill with a Rule Strong border; border turns Dash Blue on hover.
 - **Ghost:** no fill, Muted Steel text, same border. For cancel, hide, forget.
 - **Primary:** Dash Blue fill with Garage Floor text, weight 600, used only for sign-in
@@ -302,27 +298,29 @@ Quiet, bordered, and small; the interface has almost no loud buttons.
 
 ### Segmented control
 The unit switcher (miles or kilometres, mpg or L/100 km), on Fuel and Settings.
-- **Style:** a full-pill well in Garage Floor with a Rule Strong border and 3px inset.
+- **Style:** an 8px well in Garage Floor with a Rule Strong border and 3px inset; options
+  are 6px.
 - **States:** options are Muted Steel text; the selected option fills with Panel Top,
   gains a 1px Control Edge border and Headlight White text. `aria-pressed` reflects the
   state.
 
 ### Pills and tags
-- **Pill:** full-pill status chip, 12px weight 500. Neutral on Panel Top; OK on OK Wash
-  in OK Green; warning on Amber Wash in Amber.
-- **Estimate tag:** a tiny 6px-radius tag on Amber Wash in Amber, 11px weight 600
-  ("UK avg"). Always paired with the estimate it qualifies.
+- **Chip:** 6px status chip with a leading state dot, 12px weight 500. Neutral on Panel
+  Top; OK on OK Wash in OK Green; warning on Amber Wash in Amber.
+- **Estimate tag:** a tiny 6px tag on Amber Wash in Amber, 11px weight 600 ("UK avg").
+  Always paired with the estimate it qualifies.
 
 ### Cards / Containers
-- **Corner Style:** 20px.
+- **Corner Style:** 12px.
 - **Background:** Panel, with a 1px Rule border.
 - **Shadow Strategy:** none (see Elevation).
-- **Internal Padding:** 24px; tiles use 18–20px.
-- **Inner blocks:** stat blocks on Panel Raised at 12px radius; lists separate rows with
-  a 1px Rule top border and no outer frame.
+- **Internal Padding:** 20px.
+- **Heading row:** Title left, Muted Steel caption right (`card-head`).
+- **Lists:** key-value rows divided by 1px Rule hairlines, at least 44px tall, no outer
+  frame (`kv`).
 
 ### Inputs / Fields
-- **Style:** Garage Floor well, 1px Control Edge border, 10px radius, 42–44px tall.
+- **Style:** Garage Floor well, 1px Control Edge border, 8px radius, 42–44px tall.
   Placeholders in Muted Steel. Shared styles live in `app.css`; pages set widths only.
 - **Focus:** border turns Dash Blue; the global focus ring is a 2px Dash Blue outline at
   2px offset.
@@ -330,17 +328,31 @@ The unit switcher (miles or kilometres, mpg or L/100 km), on Fuel and Settings.
   divided by Rule; they wrap to stacked on narrow screens.
 
 ### Navigation
-- **Style:** Nav Shadow column with a Rule border, 30px Dash Blue brand mark at 9px
+- **Style:** Nav Shadow column with a Rule border, 30px Dash Blue brand mark at 8px
   radius, Space Grotesk wordmark at 19px.
 - **Links:** Muted Steel, weight 500, 44px tall with a 12px icon gap; hover to Headlight
   White; active link on Panel Raised.
 - **Status box:** stream connection status pinned to the bottom of the nav.
 - **Mobile:** collapses to a top bar with horizontally scrolling links.
 
-### Car hero (signature)
-The Overview hero: BMW's own render of the car centred in a 24px-radius bay on a bluer
-ground, with a Panel-dark bar along the bottom carrying the name and three headline
-figures in Space Grotesk.
+### Instrument strip (signature)
+A row of readouts (label, figure, optional note) divided by 1px hairlines, in one boxed
+12px frame (`strip boxed`). Four across on desktop, two on phones, where an odd last
+readout spans the row. Used for every page's headline figures, trip details, the refuel
+advisor and running costs; inside a card the readouts sit on Panel Raised.
+
+### Car bay (signature)
+Overview's hero: BMW's own render of the car in a flat 12px bay on a bluer ground, the
+model and colour as a plate top-left, and the instrument strip (fuel with its gauge,
+range, odometer, this week) directly beneath.
+
+### Gauge (signature)
+A 6–10px linear bar with 2px corners on Bar Track, quarter ticks cut in Panel. Fuel fills
+in Fuel Amber; the mileage limit shows used in Dash Blue over the projection.
+
+### Bar chart
+Squared bars (2px top corners) on a Rule Strong baseline, values above in 12px Space
+Grotesk, labels on an axis below. The current period is Dash Blue, the rest Bar Track.
 
 ### Dark map (signature)
 Maps use standard OpenStreetMap tiles inverted and desaturated by CSS filter rather than
@@ -354,15 +366,15 @@ colour at the right.
 ## Do's and Don'ts
 
 ### Do:
-- **Do** lead every card with one figure in Space Grotesk and explain it in a Muted
-  Steel caption below.
+- **Do** put related headline figures in one instrument strip, each with a label and,
+  where it helps, a Muted Steel note; show each figure once per page.
 - **Do** mark every estimate in Amber with a label ("~£", "UK avg", "assumed").
 - **Do** use the CSS variables in `app.css`; add a variable before reusing a new hex.
 - **Do** give charts a text equivalent: each bar is a list item with its value in a
   visually hidden label.
 - **Do** keep interactive targets at 40px or taller and keep the 2px Dash Blue focus
   ring.
-- **Do** build new components toward the tighter end of the radius scale (6–12px).
+- **Do** keep radii at 12px or less and divide related content with 1px hairlines.
 
 ### Don't:
 - **Don't** build Grafana-style walls of chart tiles or use a charting library's default
@@ -372,5 +384,7 @@ colour at the right.
 - **Don't** show an estimated number in white or grey.
 - **Don't** fill large areas with Alarm Red; red is for text and dots.
 - **Don't** mark state with a thick coloured side border; use the state dot.
+- **Don't** put a small label or kicker above a page or card heading.
+- **Don't** use progress rings; use the linear gauge.
 - **Don't** wrap readable text in `role="img"`; it hides the values from screen
   readers.
