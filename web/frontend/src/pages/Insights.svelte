@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { num, monthName, longDate, ago, toUnit, distUnit, DASH } from '../lib/format.js';
+  import { num, monthName, longDate, ago, toUnit, distUnit, DASH, money, pounds, economy, economyUnit, perDistance } from '../lib/format.js';
   import { prefs } from '../lib/prefs.svelte.js';
   import MapView from '../components/MapView.svelte';
 
@@ -40,6 +40,14 @@
     const hour = byHour.indexOf(Math.max(...byHour));
     return `Most trips start on ${DAYS[day]}s, and around ${String(hour).padStart(2, '0')}:00.`;
   });
+
+  const c = $derived(data?.costs);
+  const lim = $derived(m?.limit);
+  const routes = $derived(data?.routes ?? []);
+  const PRICE_SOURCE = { local: 'median price near home', uk_average: 'UK weekly average (DESNZ)' };
+  const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups' };
+  const limitPct = $derived(lim ? Math.min(100, (lim.used_km / lim.limit_km) * 100) : 0);
+  const projPct = $derived(lim?.projected_km ? Math.min(100, (lim.projected_km / lim.limit_km) * 100) : 0);
 
   const dests = $derived(data?.destinations ?? []);
   const markers = $derived(
@@ -134,6 +142,49 @@
     </div>
   </div>
 
+  <div class="card">
+    <div class="card-head">
+      <h2>Running costs</h2>
+      <span class="small muted">fuel only, at today's prices</span>
+    </div>
+    {#if !c?.pence_per_km}
+      <p class="muted">Needs the car's fuel figures (from BMW, within a few hours) or two fill-ups, plus fuel prices.</p>
+    {:else}
+      <div class="costs">
+        <div><span class="small muted">Per month</span><span class="num tile-v">{c.cost_per_month != null ? pounds(c.cost_per_month) : DASH}</span></div>
+        <div><span class="small muted">Per year</span><span class="num tile-v">{c.cost_per_year != null ? pounds(c.cost_per_year) : DASH}</span></div>
+        <div><span class="small muted">Per {prefs.distance === 'mi' ? 'mile' : 'km'}</span><span class="num tile-v">{num(perDistance(c.pence_per_km, prefs.distance), 1)}p</span></div>
+        <div><span class="small muted">Fuel a year</span><span class="num tile-v">{c.litres_per_year != null ? `${num(c.litres_per_year)} L` : DASH}</span></div>
+      </div>
+      <p class="small muted">
+        {perYear != null ? `${num(perYear)} ${unit} a year` : 'Your mileage'} at {economy(c.economy_l100, prefs.economy)} {economyUnit(prefs.economy)} ({ECON_SOURCE[c.economy_source]})
+        and {num(c.price_ppl, 1)}p/L ({PRICE_SOURCE[c.price_source]}).
+      </p>
+    {/if}
+  </div>
+
+  {#if lim}
+    <div class="card">
+      <div class="card-head">
+        <h2>Mileage limit</h2>
+        <span class="small muted">{longDate(lim.year_start)} – {longDate(lim.year_end)}</span>
+      </div>
+      <div class="limit-bar" role="img" aria-label={`Used ${num(limitPct)}% of the yearly limit; projected ${num(projPct)}%`}>
+        <div class="proj" style:width={`${projPct}%`} class:over={lim.on_track === false}></div>
+        <div class="used" style:width={`${limitPct}%`}></div>
+      </div>
+      <div class="limit-facts">
+        <span><strong class="num">{num(toUnit(lim.used_km, prefs.distance))}</strong> <span class="muted">of {num(toUnit(lim.limit_km, prefs.distance))} {unit} used{lim.used_estimated ? ' (partly estimated)' : ''}</span></span>
+        {#if lim.projected_km != null}
+          <span class:over-text={lim.on_track === false} class:ok-text={lim.on_track}>
+            On course for {num(toUnit(lim.projected_km, prefs.distance))} {unit}{lim.on_track === false ? `: ${num(toUnit(lim.projected_km - lim.limit_km, prefs.distance))} over` : ''}
+          </span>
+        {/if}
+      </div>
+      <p class="small muted">{lim.days_left} days left. {lim.remaining_km > 0 ? `That's about ${num(toUnit(lim.remaining_km / Math.max(1, lim.days_left / 7), prefs.distance))} ${unit} a week to stay within it.` : 'The limit is already used up.'}</p>
+    </div>
+  {/if}
+
   <div class="two">
     <div class="card">
       <div class="card-head"><h2>Distance per month</h2><span class="small muted">{unit}</span></div>
@@ -172,6 +223,36 @@
       <p class="small muted">{busiest ?? 'Patterns show after a couple of weeks of driving.'}</p>
     </div>
   </div>
+
+  {#if routes.length}
+    <div class="card">
+      <div class="card-head"><h2>Regular journeys</h2><span class="small muted">by named place</span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Journey</th><th class="r">Trips</th><th class="r">Average</th><th class="r">Total</th><th class="r">Fuel cost</th></tr></thead>
+          <tbody>
+            {#each routes as r}
+              <tr>
+                <td>
+                  {#if r.from}{r.from} → {r.to}{:else}<span class="muted">Other trips</span>{/if}
+                  {#if r.short && r.short === r.trips}<span class="tag">short</span>{/if}
+                </td>
+                <td class="r">{r.trips}</td>
+                <td class="r">{num(toUnit(r.avg_km, prefs.distance), 1)} {unit} · {r.avg_minutes} min</td>
+                <td class="r">{num(toUnit(r.km, prefs.distance))} {unit}</td>
+                <td class="r">{r.cost != null ? `~${money(r.cost)}` : DASH}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+      {#if !routes.some((r) => r.from)}
+        <p class="small muted">Name the places below (Home, Work…) to split your driving into journeys.</p>
+      {:else}
+        <p class="small muted">Fuel cost is estimated from distance at your usual economy and today's prices.</p>
+      {/if}
+    </div>
+  {/if}
 
   <div class="card">
     <div class="card-head"><h2>Places</h2><span class="small muted">where trips end</span></div>
@@ -239,4 +320,20 @@
   .btn:hover { border-color: var(--accent); }
   .btn.ghost { background: none; color: var(--muted); }
   .bad { color: #ffb4b4; }
+  .costs { display: flex; flex-wrap: wrap; gap: 16px 40px; margin-bottom: 8px; }
+  .costs > div { display: flex; flex-direction: column; gap: 4px; }
+  .limit-bar { position: relative; height: 14px; border-radius: 999px; background: var(--card-3); overflow: hidden; margin: 6px 0 12px; }
+  .limit-bar .used, .limit-bar .proj { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 999px; }
+  .limit-bar .used { background: var(--accent); }
+  .limit-bar .proj { background: #2b4a73; }
+  .limit-bar .proj.over { background: #6b3a1e; }
+  .limit-facts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; }
+  .over-text { color: var(--warn); }
+  .ok-text { color: var(--ok); }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; min-width: 520px; }
+  th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 0 10px 10px; }
+  td { padding: 11px 10px; border-top: 1px solid var(--line); }
+  .r { text-align: right; }
+  .tag { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 6px; background: var(--card-3); color: var(--muted); font-size: 11px; }
 </style>

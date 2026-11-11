@@ -53,6 +53,12 @@ export function duration(minutes) {
 }
 
 const gbp = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' });
+const gbp0 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 });
+// Whole pounds, for projections where pence would be false precision.
+export function pounds(v) {
+  return v == null ? DASH : gbp0.format(v);
+}
+
 export function money(v) {
   return v == null ? DASH : gbp.format(v);
 }

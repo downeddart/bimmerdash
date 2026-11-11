@@ -25,7 +25,12 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - [x] Login (single account, first-run setup, password reset command)
 - [x] Settings: miles or km, mpg or L/100 km, fuel grade (E10, E5, diesel)
 - [x] Web UI: insights page, live map of the car on Overview
-- [ ] Pushover alerts (left unlocked, low fuel, service due, stream silent)
+- [x] Car health: service schedule, MOT, tyre pressures against target, warning lights
+- [x] Economy from the car's own fuel counters (to 0.1 L, not the tank gauge)
+- [x] Refuel advisor: the cheapest station near the car, counting the drive there
+- [x] Running cost projection, regular journeys, yearly mileage limit tracking
+- [x] Alerts (left unlocked/open, low fuel, tyres, service due, warning lights), with Pushover
+- [ ] Stream-silent alert
 
 ## Quick start
 
@@ -66,6 +71,7 @@ Pin a version with `BIMMERDASH_VERSION` in `.env`.
 | `derive` | Rebuild trips and fill-ups from stored data (the collector does this every few minutes) |
 | `import-raw` | Load recorded JSONL files into the database (safe to re-run) |
 | `fetch-vehicle` | Re-fetch vehicle details and picture now (2 API calls) |
+| `poll` | Fetch service, tyres, warnings and fuel use now (1 API call per car) |
 | `migrate` | Create/upgrade the database schema (the collector does this on start) |
 
 ### How trips and fill-ups are detected
@@ -84,6 +90,24 @@ Everything is recalculated from the stored data, so improvements apply to past t
 For maps, your browser loads tiles from OpenStreetMap.
 
 BMW allows 50 CarData API calls per day. bimmerdash logs every call and stops at 45.
+
+### Health, economy and alerts
+
+Some values never come over the stream: the service schedule, Check Control warnings and
+the car's lifetime fuel counters. The collector asks BMW's REST API for them every 4 hours
+(one call per car, so 6 a day; `BIMMERDASH_REST_POLL_HOURS` changes it, `0` turns it off).
+The first time, it creates a *container* in your CarData account listing those keys.
+
+- **Economy** is the change in the car's own fuel and distance counters between polls,
+  so it's accurate to a tenth of a litre and doesn't need fill-ups.
+- **Refuel advisor** (Fuel page): stations within reach of the car, ranked by the cost of
+  filling up plus the fuel to drive there and back. It picks the nearest station unless
+  another saves at least 50p.
+- **Alerts** are listed on the Health page and, if you add Pushover keys to `.env`, sent to
+  your phone: left unlocked or open (once the car has been quiet for 10 minutes), fuel
+  low (with the cheapest station nearby), a tyre 10% below the car's target pressure, a
+  service or MOT due within 30 days, and any warning light. Each is sent once, and again
+  only after it has cleared. Turn them on and off in Settings.
 
 ## Signing in
 

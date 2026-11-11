@@ -225,11 +225,19 @@ def test_tidy_name():
 
 def test_settings_round_trip(client):
     s = client.get("/api/settings").json()
-    assert s["global"] == {"distance_unit": "mi", "economy_unit": "mpg"}
+    assert s["global"]["distance_unit"] == "mi" and s["global"]["economy_unit"] == "mpg"
+    assert s["global"]["alerts"]["low_fuel_percent"] == 20
     assert s["vehicles"][VIN]["fuel_grade"] is None
 
     s = client.put("/api/settings", json={"distance_unit": "km"}).json()
-    assert s["global"] == {"distance_unit": "km", "economy_unit": "mpg"}
+    assert s["global"]["distance_unit"] == "km" and s["global"]["economy_unit"] == "mpg"
+    # Alert settings merge: changing one keeps the others.
+    client.put("/api/settings", json={"alerts": {"low_fuel_percent": 15}})
+    s = client.put("/api/settings", json={"alerts": {"tyres": False}}).json()
+    assert s["global"]["alerts"]["low_fuel_percent"] == 15
+    assert s["global"]["alerts"]["tyres"] is False and s["global"]["alerts"]["left_open"] is True
+    bad = client.put("/api/settings", json={"alerts": {"low_fuel_percent": 90}})
+    assert bad.status_code == 422
     assert client.put("/api/settings", json={"distance_unit": "furlongs"}).status_code == 422
 
     s = client.put(
@@ -403,3 +411,152 @@ def test_usage_and_places(client):
     assert client.post("/api/places", json={"name": "", "lat": 1, "lon": 1}).status_code == 422
     assert client.delete(f"/api/places/{p['id']}").status_code == 200
     assert client.delete(f"/api/places/{p['id']}").status_code == 404
+
+
+def _latest(c, values: dict, at: str = "now()"):
+    for key, value in values.items():
+        num = value if isinstance(value, int | float) and not isinstance(value, bool) else None
+        c.execute(
+            "INSERT INTO latest_values (vin, key, time, value, value_num, unit)"
+            f" VALUES (%s, %s, {at}, %s, %s, NULL)"
+            " ON CONFLICT (vin, key) DO UPDATE SET value = EXCLUDED.value,"
+            " value_num = EXCLUDED.value_num, time = EXCLUDED.time",
+            (VIN, key, Jsonb(value), num),
+        )
+
+
+def test_health_endpoint(client):
+    tyre = "vehicle.chassis.axle.row{}.wheel.{}.tire.{}"
+    with psycopg.connect(URL, autocommit=True) as c:
+        _latest(
+            c,
+            {
+                "vehicle.status.conditionBasedServices": [
+                    {
+                        "type": "OIL",
+                        "title": "Engine oil",
+                        "status": "OK",
+                        "date": "2030-01",
+                        "unitOfLengthRemaining": "7560",
+                    },
+                    {
+                        "type": "VEHICLE_TUV",
+                        "title": "Statutory vehicle inspection",
+                        "status": "OK",
+                        "date": "2030-09",
+                    },
+                ],
+                "vehicle.status.checkControlMessages": [{"title": "Washer fluid low"}],
+                "vehicle.electronicControlUnit.diagnosticTroubleCodes.raw": "97,3178A;64,8040;",
+                tyre.format(1, "left", "pressure"): 207,
+                tyre.format(1, "left", "pressureTarget"): 234,
+                tyre.format(2, "left", "pressure"): 317,
+                tyre.format(2, "left", "pressureTarget"): 317,
+            },
+        )
+        c.execute(
+            "INSERT INTO alerts (vin, kind, ref, title, message) VALUES"
+            " (%s, 'tyre', 'front left', 'Tyre pressure low', 'x')",
+            (VIN,),
+        )
+    h = client.get(f"/api/vehicles/{VIN}/health").json()
+    assert [s["name"] for s in h["services"]] == ["Engine oil", "MOT"]
+    assert h["services"][0]["distance_km"] == 7560
+    assert h["tyres"]["state"] == "low"
+    assert h["tyres"]["wheels"]["front_left"]["below_target_pct"] == 11.5
+    assert h["tyres"]["wheels"]["rear_left"]["state"] == "ok"
+    assert h["warnings"]["items"][0]["text"] == "Washer fluid low"
+    assert h["fault_memory"]["count"] == 2 and h["fault_memory"]["modules"] == 2
+    assert h["issues"] == 2 and h["due_soon"] == 0  # tyre + warning
+    assert h["alerts"]["open"][0]["ref"] == "front left"
+
+
+def test_fuel_advisor_counts_the_detour(client):
+    with psycopg.connect(URL, autocommit=True) as c:
+        _latest(
+            c,
+            {
+                "vehicle.cabin.infotainment.navigation.currentLocation.latitude": 51.5,
+                "vehicle.cabin.infotainment.navigation.currentLocation.longitude": -1.0,
+                "vehicle.drivetrain.fuelSystem.remainingFuel": 10,
+                "vehicle.drivetrain.fuelSystem.level": 20,
+                "vehicle.drivetrain.lastRemainingRange": 150,
+            },
+        )
+        c.execute("UPDATE vehicles SET tank_litres = 50")
+        # Near: 1 km at 160p. Far: 6 km at 150p. Cheaper, but is it worth the drive?
+        c.execute(
+            "INSERT INTO forecourts (node_id, trading_name, latitude, longitude) VALUES"
+            " ('near', 'NEAR FUEL', 51.509, -1.0), ('far', 'Far Fuel', 51.554, -1.0)"
+        )
+        c.execute(
+            "INSERT INTO fuel_prices (node_id, fuel_type, effective_at, price) VALUES"
+            " ('near', 'E10', now() - interval '1 day', 160.0),"
+            " ('far', 'E10', now() - interval '1 day', 150.0)"
+        )
+    a = client.get(f"/api/vehicles/{VIN}/fuel/advisor").json()
+    assert a["fill_litres"] == 40 and a["economy"]["source"] == "assumed"
+    assert a["nearest"]["name"] == "Near Fuel"
+    best = a["best"]
+    # 40 L: £64.00 vs £60.00; the 12 km round trip burns ~0.84 L (about £1.26).
+    assert best["name"] == "Far Fuel" and 2.5 < best["saving"] < 3.0
+    assert a["radius_km"] == 8
+
+
+def test_car_economy_costs_routes_and_mileage_limit(client):
+    fuel_key = "vehicle.drivetrain.fuelSystem.consumptionOverLifeTime.overall.fuel"
+    dist_key = "vehicle.drivetrain.fuelSystem.consumptionOverLifeTime.overall.referenceDistance"
+    with psycopg.connect(URL, autocommit=True) as c:
+        for days_ago, litres, km in ((40, 7000.0, 100000.0), (1, 7035.0, 100500.0)):
+            for key, v in ((fuel_key, litres), (dist_key, km)):
+                c.execute(
+                    "INSERT INTO telemetry (time, vin, key, value, value_num, unit) VALUES"
+                    " (now() - make_interval(days => %s), %s, %s, %s, %s, NULL)",
+                    (days_ago, VIN, key, Jsonb(v), v),
+                )
+        c.execute(
+            "INSERT INTO trips (vin, start_time, end_time, distance_km, start_lat, start_lon,"
+            " end_lat, end_lon) VALUES"
+            " (%s, now() - interval '3 h', now() - interval '150 min', 20, 51.5, -1.0, 51.7, -1.2),"
+            " (%s, now() - interval '2 h', now() - interval '90 min', 20, 51.7, -1.2, 51.5, -1.0),"
+            " (%s, now() - interval '1 h', now() - interval '50 min', 2, 52.0, -2.0, 52.0, -2.01)",
+            (VIN, VIN, VIN),
+        )
+        c.execute(
+            "INSERT INTO uk_average_fuel_prices (week_start, fuel, price)"
+            " VALUES (current_date - 3, 'petrol', 150.0)"
+        )
+        c.execute(
+            "UPDATE vehicles SET basic_data = %s",
+            (Jsonb({"constructionDate": "2021-03-02T00:00:00.000+0000"}),),
+        )
+    fuel = client.get(f"/api/vehicles/{VIN}/fuel").json()
+    ce = fuel["car_economy"]
+    assert ce["recent_l100"] == 7.0 and ce["recent_km"] == 500 and ce["lifetime_l100"] == 7.0
+
+    client.post("/api/places", json={"name": "Home", "lat": 51.5, "lon": -1.0})
+    client.post("/api/places", json={"name": "Work", "lat": 51.7, "lon": -1.2})
+    u = client.get(f"/api/vehicles/{VIN}/usage").json()
+    costs = u["costs"]
+    assert costs["economy_source"] == "car_recent" and costs["price_source"] == "uk_average"
+    assert costs["pence_per_km"] == 10.5  # 7 L/100 km at 150p
+    assert costs["cost_per_year"] == round(u["mileage"]["estimate_km_per_year"] * 0.105)
+    routes = {(r["from"], r["to"]): r for r in u["routes"]}
+    assert routes[("Home", "Work")]["trips"] == 1 and routes[("Home", "Work")]["cost"] == 2.1
+    assert routes[(None, None)]["short"] == 1  # unnamed trips grouped last
+    assert u["routes"][-1]["from"] is None
+
+    assert u["mileage"]["limit"] is None
+    s = client.put(
+        f"/api/vehicles/{VIN}/settings",
+        json={"mileage_limit_km": 16093, "mileage_year_start": "2026-03-01"},
+    ).json()
+    assert s["vehicles"][VIN]["mileage_limit_km"] == 16093
+    limit = client.get(f"/api/vehicles/{VIN}/usage").json()["mileage"]["limit"]
+    assert limit["limit_km"] == 16093 and limit["year_start"] == "2026-03-01"
+    assert limit["used_estimated"] is True  # history starts after the year began
+    assert limit["projected_km"] > limit["used_km"]
+    s = client.put(f"/api/vehicles/{VIN}/settings", json={"mileage_limit_km": 0}).json()
+    assert s["vehicles"][VIN]["mileage_limit_km"] is None
+    bad = client.put(f"/api/vehicles/{VIN}/settings", json={"mileage_year_start": "March"})
+    assert bad.status_code == 422

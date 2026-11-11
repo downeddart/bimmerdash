@@ -107,6 +107,12 @@
             <div><span class="muted small">Duration</span><span class="num">{duration(trip.minutes)}</span></div>
             <div><span class="muted small">Avg speed</span><span class="num">{speed ? `${num(toUnit(speed, prefs.distance))} ${speedUnit(prefs.distance)}` : DASH}</span></div>
             <div><span class="muted small">Fuel used</span><span class="num">{trip.fuel_used_l != null ? `${num(trip.fuel_used_l)} L` : DASH}</span></div>
+            {#if trip.eco_pro_pct != null}
+              <div title="Share of the trip driven in ECO PRO (and ECO PRO+) mode">
+                <span class="muted small">ECO PRO</span>
+                <span class="num">{num(trip.eco_pro_pct + (trip.eco_pro_plus_pct ?? 0))}%</span>
+              </div>
+            {/if}
             <div><span class="muted small">Odometer</span><span class="num">{trip.end_odometer != null ? `${num(toUnit(trip.end_odometer, prefs.distance))} ${unit}` : DASH}</span></div>
           </div>
           {#if trip.fuel_used_l != null && trip.distance_km < 50}

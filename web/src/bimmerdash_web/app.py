@@ -13,7 +13,8 @@ from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from starlette.concurrency import run_in_threadpool
 
-from . import auth, derived, queries, settings, usage
+from . import advisor, auth, derived, queries, settings, usage
+from .health import health as health_report
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
@@ -192,6 +193,16 @@ def create_app(database_url: str | None = None) -> FastAPI:
     def nearby(vin: str, radius_km: float = 5):
         with pool.connection() as conn:
             return derived.nearby_prices(conn, vin_or_404(vin), max(0.5, min(radius_km, 30)))
+
+    @app.get("/api/vehicles/{vin}/fuel/advisor")
+    def fuel_advisor(vin: str, radius_km: float = 8):
+        with pool.connection() as conn:
+            return advisor.advise(conn, vin_or_404(vin), max(1, min(radius_km, 15)))
+
+    @app.get("/api/vehicles/{vin}/health")
+    def vehicle_health(vin: str):
+        with pool.connection() as conn:
+            return health_report(conn, vin_or_404(vin))
 
     @app.get("/api/vehicles/{vin}/usage")
     def vehicle_usage(vin: str):

@@ -35,7 +35,20 @@ class CarDataApi:
         self.db = db
         self.daily_budget = daily_budget
 
-    def _get(self, path: str, label: str, accept: str) -> httpx.Response:
+    def _get(
+        self, path: str, label: str, accept: str, params: dict | None = None
+    ) -> httpx.Response:
+        return self._call("GET", path, label, accept, params=params)
+
+    def _call(
+        self,
+        method: str,
+        path: str,
+        label: str,
+        accept: str = "application/json",
+        params: dict | None = None,
+        json: dict | None = None,
+    ) -> httpx.Response:
         used = self.db.api_calls_last_24h()
         if used >= self.daily_budget:
             raise QuotaExceeded(
@@ -43,8 +56,11 @@ class CarDataApi:
             )
         status = None
         try:
-            r = self.http.get(
+            r = self.http.request(
+                method,
                 API_BASE + path,
+                params=params,
+                json=json,
                 headers={
                     "Authorization": f"Bearer {self.access_token()}",
                     "x-version": "v1",
@@ -68,6 +84,32 @@ class CarDataApi:
         r = self._get(f"/customers/vehicles/{vin}/image", "image", "*/*")
         r.raise_for_status()
         return normalise_image(r.content)
+
+    def create_container(self, name: str, purpose: str, descriptors: list[str]) -> str:
+        """A container is BMW's saved list of keys that telematicData returns."""
+        r = self._call(
+            "POST",
+            "/customers/containers",
+            "createContainer",
+            json={"name": name, "purpose": purpose, "technicalDescriptors": descriptors},
+        )
+        r.raise_for_status()
+        container_id = r.json().get("containerId")
+        if not container_id:
+            raise ValueError("container created but no containerId returned")
+        return container_id
+
+    def telematic_data(self, vin: str, container_id: str) -> dict:
+        """{key: {value, unit, timestamp}}, values as BMW's strings."""
+        _check_vin(vin)
+        r = self._get(
+            f"/customers/vehicles/{vin}/telematicData",
+            "telematicData",
+            "application/json",
+            params={"containerId": container_id},
+        )
+        r.raise_for_status()
+        return r.json().get("telematicData") or {}
 
 
 def _check_vin(vin: str) -> None:

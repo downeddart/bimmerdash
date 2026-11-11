@@ -1,4 +1,4 @@
-"""Command line: bimmerdash {login,stream,keys,migrate,import-raw,fetch-vehicle,prices}."""
+"""Command line: bimmerdash <command>. Run `bimmerdash --help` for the list."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import argparse
 import logging
 import os
 import sys
+from datetime import timedelta
 
 import httpx
 
@@ -122,6 +123,39 @@ def cmd_fetch_vehicle(cfg: Config) -> int:
     return 0
 
 
+def cmd_poll(cfg: Config) -> int:
+    """Fetch service, tyre, warning and fuel-use values now (1 API call per car)."""
+    from .stream import RawWriter
+    from .telematic import TelematicPoller
+
+    db = _require_db(cfg)
+    if db is None:
+        return 2
+    db.migrate()
+    tokens = TokenStore(cfg.token_path).load()
+    if tokens is None:
+        print("Error: not logged in; run `bimmerdash login`", file=sys.stderr)
+        return 1
+    if tokens.expires_soon(margin=120):
+        print("Token is being refreshed by the collector; try again in a minute.", file=sys.stderr)
+        return 1
+    vins = [r[0] for r in db.conn.execute("SELECT vin FROM vehicles ORDER BY first_seen")]
+    db.conn.commit()
+    with httpx.Client(timeout=30) as http:
+        api = CarDataApi(http, lambda: tokens.access_token, db, cfg.api_daily_budget)
+        poller = TelematicPoller(api, db, RawWriter(cfg.raw_dir), timedelta(0))
+        for i, vin in enumerate(vins, 1):
+            try:
+                n = poller.poll(vin)
+            except (QuotaExceeded, httpx.HTTPError, ValueError) as e:
+                status = getattr(getattr(e, "response", None), "status_code", None)
+                print(f"Error: {f'HTTP {status}' if status else e}", file=sys.stderr)
+                return 1
+            print(f"Car {i}: {n} value(s) received")
+    print(f"API calls in last 24 h: {db.api_calls_last_24h()}")
+    return 0
+
+
 def cmd_prices(cfg: Config, once: bool) -> int:
     from .fuelfinder import FuelFinderClient, FuelFinderError, run_prices, sync_once
     from .ukaverages import fetch_all
@@ -159,6 +193,7 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("import-raw", help="load recorded JSONL files into the database")
     sub.add_parser("derive", help="rebuild trips and fill-ups from stored data")
     sub.add_parser("fetch-vehicle", help="fetch vehicle details and image now (uses API quota)")
+    sub.add_parser("poll", help="fetch service, tyres, warnings and fuel use now (uses API quota)")
     prices = sub.add_parser("prices", help="keep UK fuel price history in sync (Fuel Finder)")
     prices.add_argument("--once", action="store_true", help="sync once and exit")
     args = parser.parse_args(argv)
@@ -187,6 +222,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_derive(cfg)
     if args.command == "fetch-vehicle":
         return cmd_fetch_vehicle(cfg)
+    if args.command == "poll":
+        return cmd_poll(cfg)
     if args.command == "prices":
         return cmd_prices(cfg, args.once)
     return cmd_keys(cfg, args.redact)

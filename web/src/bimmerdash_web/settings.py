@@ -16,18 +16,50 @@ GRADES = {
     "B7_STANDARD": "Diesel",
     "B7_PREMIUM": "Premium diesel",
 }
-DEFAULTS = {"distance_unit": "mi", "economy_unit": "mpg"}
+# Kept in step with the collector's alerts.DEFAULTS.
+ALERT_DEFAULTS = {
+    "enabled": True,
+    "left_open": True,
+    "left_open_minutes": 10,
+    "low_fuel": True,
+    "low_fuel_percent": 20,
+    "tyres": True,
+    "tyre_low_percent": 10,
+    "service": True,
+    "service_days": 30,
+    "warnings": True,
+}
+DEFAULTS = {"distance_unit": "mi", "economy_unit": "mpg", "alerts": ALERT_DEFAULTS}
+# Saving these as 0 or "" removes them (back to automatic / not set).
+CLEARABLE = {"tank_litres", "mileage_limit_km", "mileage_year_start"}
+
+
+class AlertSettings(BaseModel):
+    enabled: bool | None = None
+    left_open: bool | None = None
+    left_open_minutes: int | None = Field(None, ge=5, le=240)
+    low_fuel: bool | None = None
+    low_fuel_percent: int | None = Field(None, ge=5, le=50)
+    tyres: bool | None = None
+    tyre_low_percent: int | None = Field(None, ge=5, le=30)
+    service: bool | None = None
+    service_days: int | None = Field(None, ge=7, le=120)
+    warnings: bool | None = None
 
 
 class GlobalSettings(BaseModel):
     distance_unit: str | None = Field(None, pattern="^(km|mi)$")
     economy_unit: str | None = Field(None, pattern="^(mpg|l100)$")
+    alerts: AlertSettings | None = None
 
 
 class VehicleSettings(BaseModel):
     fuel_grade: str | None = Field(None, pattern="^(E10|E5|B7_STANDARD|B7_PREMIUM)$")
     # 0 clears it (use what the car reports)
     tank_litres: float | None = Field(None, ge=0, le=200)
+    # Yearly mileage limit (insurance, PCP, lease) in km, and the day its year starts.
+    mileage_limit_km: float | None = Field(None, ge=0, le=200_000)
+    mileage_year_start: str | None = Field(None, pattern=r"^(\d{4}-\d{2}-\d{2})?$")
 
 
 def _ready(conn: psycopg.Connection) -> bool:
@@ -61,9 +93,16 @@ def get_all(conn: psycopg.Connection) -> dict:
             "fuel_grade_in_use": grade_in_use,
             "fuel_kind": kind,
             "tank_litres_detected": tank_seen,
+            "mileage_limit_km": chosen.get("mileage_limit_km"),
+            "mileage_year_start": chosen.get("mileage_year_start"),
         }
+    chosen = _scope(conn, "global")
     return {
-        "global": {**DEFAULTS, **_scope(conn, "global")},
+        "global": {
+            **DEFAULTS,
+            **chosen,
+            "alerts": {**ALERT_DEFAULTS, **(chosen.get("alerts") or {})},
+        },
         "vehicles": vehicles,
         "grades": GRADES,
     }
@@ -76,7 +115,15 @@ def save(conn: psycopg.Connection, scope: str, values: dict) -> None:
         for key, value in values.items():
             if value is None:
                 continue
-            if key == "tank_litres" and value == 0:
+            if key == "alerts":
+                current = conn.execute(
+                    "SELECT value FROM settings WHERE scope = %s AND key = 'alerts'", (scope,)
+                ).fetchone()
+                value = {
+                    **(current[0] if current else {}),
+                    **{k: v for k, v in value.items() if v is not None},
+                }
+            if key in CLEARABLE and value in (0, ""):
                 conn.execute("DELETE FROM settings WHERE scope = %s AND key = %s", (scope, key))
                 # Still bump updated_at somewhere so the collector notices.
                 conn.execute(
