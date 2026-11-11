@@ -49,7 +49,7 @@
   header p { margin: 4px 0 0; }
   .table-card { padding: 0; overflow: hidden; }
   .search { display: flex; flex-direction: column; gap: 6px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
-  input { background: var(--card-2); border: 1px solid var(--line-2); border-radius: 10px; padding: 10px 12px; color: var(--text); font: inherit; max-width: 360px; min-height: 44px; }
+  input { max-width: 360px; min-height: 44px; }
   .scroll { overflow-x: auto; }
   table { width: 100%; min-width: 640px; border-collapse: collapse; }
   th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 10px 24px; }

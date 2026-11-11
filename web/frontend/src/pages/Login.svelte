@@ -57,7 +57,7 @@
       </label>
     {/if}
 
-    {#if error}<div class="err" role="alert">{error}</div>{/if}
+    {#if error}<div class="err-box" role="alert">{error}</div>{/if}
 
     <button type="submit" disabled={busy}>{busy ? '…' : setup ? 'Create account' : 'Sign in'}</button>
   </form>
@@ -71,10 +71,9 @@
   h1 { font-size: 26px; }
   p { margin: -6px 0 0; line-height: 1.5; }
   label { display: flex; flex-direction: column; gap: 6px; font-weight: 500; }
-  input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 11px 12px; min-height: 44px; }
-  input:focus { border-color: var(--accent); outline: none; }
+  input { padding: 11px 12px; min-height: 44px; }
   button { margin-top: 4px; border: 0; border-radius: 10px; background: var(--accent); color: #0b0d10; font-weight: 600; padding: 12px; min-height: 46px; cursor: pointer; }
   button:hover { background: var(--accent-hover); }
   button:disabled { opacity: 0.6; cursor: default; }
-  .err { color: #ffb4b4; background: #2a1414; border: 1px solid #5c2626; padding: 10px 12px; border-radius: 10px; font-size: 13px; }
+  .err-box { padding: 10px 12px; border-radius: 10px; font-size: 13px; }
 </style>

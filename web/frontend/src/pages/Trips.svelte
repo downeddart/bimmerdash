@@ -78,15 +78,15 @@
     </div>
   {:else}
     <div class="split">
-      <div class="card list" role="list">
+      <ul class="card list" aria-label="Trips">
         {#each trips as t, i}
-          <button class="row" class:active={i === selected} onclick={() => (selected = i)} role="listitem" aria-current={i === selected}>
+          <li><button class="row" class:active={i === selected} onclick={() => (selected = i)} aria-current={i === selected ? 'true' : undefined}>
             <span class="when">{dateTime(t.start_time)}{#if route(t)}<span class="route small muted">{route(t)}</span>{/if}</span>
             <span class="km num">{km(t.distance_km)} {unit}</span>
             <span class="small muted">{duration(t.minutes)}{t.fuel_used_l != null ? ` · ${num(t.fuel_used_l)} L` : ''}</span>
-          </button>
+          </button></li>
         {/each}
-      </div>
+      </ul>
 
       {#if trip}
         <div class="card detail">
@@ -131,8 +131,8 @@
   .empty h2 { margin-bottom: 6px; }
   .split { display: grid; gap: 16px; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); align-items: start; }
   @media (max-width: 960px) { .split { grid-template-columns: 1fr; } }
-  .list { padding: 8px; display: flex; flex-direction: column; gap: 2px; max-height: 640px; overflow-y: auto; }
-  .row { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 14px; border-radius: 12px; min-height: 44px; }
+  .list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 2px; max-height: 640px; overflow-y: auto; }
+  .row { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 14px; border-radius: 12px; min-height: 44px; }
   .row:hover { background: var(--card-2); }
   .row.active { background: var(--card-3); }
   .row:focus-visible { outline: 2px solid var(--accent); }
