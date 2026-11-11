@@ -20,8 +20,8 @@
     !trip
       ? []
       : [
-          trip.start && { ...trip.start, colour: '#9ba3af', label: 'Start' },
-          trip.end && { ...trip.end, colour: '#5aa2ff', label: 'End' },
+          trip.start && { ...trip.start, colour: 'muted', label: 'Start' },
+          trip.end && { ...trip.end, colour: 'accent', label: 'End' },
         ].filter(Boolean)
   );
   const line = $derived(
@@ -100,7 +100,7 @@
           {:else}
             <div class="nomap muted small">No position was reported for this trip.</div>
           {/if}
-          <div class="strip boxed stats" style="--cols: 3">
+          <div class="strip inset stats" style="--cols: 3">
             <div class="readout"><span class="label">Distance</span><span class="value">{km(trip.distance_km)}<span class="unit">{unit}</span></span></div>
             <div class="readout"><span class="label">Duration</span><span class="value">{duration(trip.minutes)}</span></div>
             <div class="readout"><span class="label">Average speed</span><span class="value">{speed ? num(toUnit(speed, prefs.distance)) : DASH}{#if speed}<span class="unit">{speedUnit(prefs.distance)}</span>{/if}</span></div>

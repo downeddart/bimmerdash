@@ -140,6 +140,14 @@ def test_vehicle_details_and_api_log(db):
     assert db.api_calls_last_24h() == 1
 
 
+def test_recompress_images_converts_once(db):
+    db.ingest(rec("2026-11-09T08:00:01+00:00", 1, "2026-11-09T08:00:00Z"))
+    db.save_vehicle_details(VIN, None, b"old-png", "image/png")
+    assert db.recompress_images(lambda data: (b"webp:" + data, "image/webp")) == 1
+    assert q(db, "SELECT image, image_type FROM vehicles") == [(b"webp:old-png", "image/webp")]
+    assert db.recompress_images(lambda data: pytest.fail("already WebP")) == 0
+
+
 def test_fuel_prices_nearest_and_price_at(db):
     from datetime import UTC, datetime
 

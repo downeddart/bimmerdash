@@ -225,7 +225,8 @@
   .car { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 76px; }
   .outline { position: absolute; left: 50%; top: 6px; width: 52px; height: calc(100% - 12px); transform: translateX(-50%); fill: none; stroke: var(--line-2); stroke-width: 1.5; overflow: visible; }
   .outline * { vector-effect: non-scaling-stroke; }
-  .wheel { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line); }
+  .wheel { display: flex; flex-direction: column; gap: 2px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .wheel.front { border-top: 0; padding-top: 0; }
   .wheel-name { display: flex; align-items: center; gap: 8px; }
   .wheel-meta { display: flex; flex-wrap: wrap; gap: 0 10px; }
   .big { font-size: 28px; color: var(--c); }
@@ -237,7 +238,7 @@
   @media (max-width: 480px) {
     .car { gap: 10px 36px; }
     .outline { width: 30px; }
-    .sched thead { display: none; }
+    .sched thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
     .sched tbody th { white-space: normal; }
     .dist-col { display: none; }
     .dist-inline { display: inline; }

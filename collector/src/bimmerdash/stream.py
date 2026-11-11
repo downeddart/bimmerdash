@@ -20,7 +20,7 @@ import paho.mqtt.client as mqtt
 
 from . import alerts
 from .auth import AuthError, TokenStore, refresh
-from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details
+from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details, normalise_image
 from .config import Config
 from .db import Database
 from .derive import rebuild_all, settings_changed_at
@@ -134,6 +134,8 @@ def run_stream(cfg: Config) -> int:
     main_db = Database(cfg.database_url) if cfg.database_url else None
     if main_db is not None:
         main_db.migrate()
+        if n := main_db.recompress_images(normalise_image):
+            log.info("re-encoded %d stored car image(s) as WebP", n)
     api = (
         CarDataApi(http, lambda: tokens.access_token, main_db, cfg.api_daily_budget)
         if main_db is not None

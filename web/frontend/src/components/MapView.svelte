@@ -14,9 +14,12 @@
 
   const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+  // Marker colours are theme names ('accent', 'ok', 'warn', 'text', 'muted').
+  const colour = (name) => token(`--${name ?? 'accent'}`);
+
   function draw() {
     if (!map) return;
-    const accent = token('--accent');
+    const accent = colour('accent');
     layer.clearLayers();
     const pts = [];
     if (line.length > 1) {
@@ -29,7 +32,7 @@
         radius: m.radius ?? 7,
         color: token('--bg'),
         weight: 2,
-        fillColor: m.colour ?? accent,
+        fillColor: colour(m.colour),
         fillOpacity: 1,
       }).addTo(layer);
       if (m.label) c.bindTooltip(m.label);

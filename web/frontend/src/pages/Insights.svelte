@@ -54,7 +54,7 @@
     dests.map((d, i) => ({
       lat: d.lat,
       lon: d.lon,
-      colour: d.name ? '#3dd68c' : '#5aa2ff',
+      colour: d.name ? 'ok' : 'accent',
       radius: 6 + Math.min(6, d.visits),
       label: `${d.name ?? `Place ${i + 1}`} · ${d.visits} visit${d.visits === 1 ? '' : 's'}`,
     }))
@@ -147,7 +147,7 @@
     {#if !c?.pence_per_km}
       <p class="muted">Needs the car's fuel figures (from BMW, within a few hours) or two fill-ups, plus fuel prices.</p>
     {:else}
-      <div class="strip boxed costs">
+      <div class="strip inset costs">
         <div class="readout"><span class="label">Per month</span><span class="value">{c.cost_per_month != null ? pounds(c.cost_per_month) : DASH}</span></div>
         <div class="readout"><span class="label">Per year</span><span class="value">{c.cost_per_year != null ? pounds(c.cost_per_year) : DASH}</span></div>
         <div class="readout"><span class="label">Per {prefs.distance === 'mi' ? 'mile' : 'km'}</span><span class="value">{num(perDistance(c.pence_per_km, prefs.distance), 1)}p</span></div>
@@ -308,11 +308,10 @@
   .name-form { display: flex; gap: 6px; width: 100%; }
   .name-form input { flex: 1; min-width: 0; }
   .costs { margin-bottom: 12px; }
-  .costs > * { background: var(--card-2); padding: 12px 14px; }
   .limit-bar { height: 10px; margin: 6px 0 12px; }
   .limit-bar .used { background: var(--accent); }
-  .limit-bar .proj { background: #2b4a73; }
-  .limit-bar .proj.over { background: #6b3a1e; }
+  .limit-bar .proj { background: var(--proj); }
+  .limit-bar .proj.over { background: var(--proj-over); }
   .limit-facts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 20px; }
   .over-text { color: var(--warn); }
   .ok-text { color: var(--ok); }

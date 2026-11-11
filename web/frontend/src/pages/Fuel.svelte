@@ -25,7 +25,7 @@
       .map((f) => ({
         lat: f.lat,
         lon: f.lon,
-        colour: f.price_source === 'uk_average' ? '#f2b33d' : '#3dd68c',
+        colour: f.price_source === 'uk_average' ? 'warn' : 'ok',
         label: `${shortDate(f.time)} · ${f.station?.trading_name ?? 'Fill-up'}`,
       }))
   );
@@ -33,7 +33,7 @@
     stations.map((x, i) => ({
       lat: x.lat,
       lon: x.lon,
-      colour: i === 0 ? '#3dd68c' : '#5aa2ff',
+      colour: i === 0 ? 'ok' : 'accent',
       radius: 6,
       label: `${x.name} · ${num(x.price, 1)}p`,
     }))
@@ -63,11 +63,11 @@
           ...advice.stations.map((x) => ({
             lat: x.lat,
             lon: x.lon,
-            colour: x === advice.stations[0] ? '#3dd68c' : '#5aa2ff',
+            colour: x === advice.stations[0] ? 'ok' : 'accent',
             radius: x === advice.stations[0] ? 8 : 6,
             label: `${x.name} · ${num(x.price, 1)}p`,
           })),
-          { lat: advice.position.lat, lon: advice.position.lon, colour: '#e6e8eb', radius: 7, label: 'Your car' },
+          { lat: advice.position.lat, lon: advice.position.lon, colour: 'text', radius: 7, label: 'Your car' },
         ]
   );
   const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups', assumed: 'a typical figure until the car reports its own' };
@@ -103,7 +103,7 @@
         <div class="muted">
           {num(b.price, 1)}p/L · {num(toUnit(b.distance_km, prefs.distance), 1)} {distUnit(prefs.distance)} from the car{b.brand && b.brand !== b.name ? ` · ${b.brand}` : ''}
         </div>
-        <div class="strip boxed adv-facts" style="--cols: 3">
+        <div class="strip inset adv-facts" style="--cols: 3">
           <div class="readout">
             <span class="label">{advice.fill_litres ? `Filling ${num(advice.fill_litres)} L` : `A ${num(advice.litres_compared)} L top-up`}</span>
             <span class="value">{money(b.fill_cost)}</span>
@@ -212,8 +212,8 @@
       <div class="card-head">
         <h2>Map</h2>
         <span class="small muted legend-inline">
-          {#if fillMarkers.length}<span><span class="sw" style="background:#3dd68c"></span>fill-up</span>{/if}
-          {#if stationMarkers.length}<span><span class="sw" style="background:#5aa2ff"></span>nearby price</span>{/if}
+          {#if fillMarkers.length}<span><span class="sw" style="background: var(--ok)"></span>fill-up</span>{/if}
+          {#if stationMarkers.length}<span><span class="sw" style="background: var(--accent)"></span>nearby price</span>{/if}
         </span>
       </div>
       <MapView markers={[...stationMarkers, ...fillMarkers]} height={320} label="Fill-ups and nearby stations" />
@@ -270,7 +270,6 @@
   .adv-title { font-family: var(--display); font-weight: 600; font-size: 26px; }
   .adv-facts { margin: 12px 0 4px; }
   .adv-facts .value { font-size: 20px; }
-  .adv-facts > * { padding: 12px 14px; background: var(--card-2); }
   .good { color: var(--ok); }
   .adv-text p { margin: 4px 0 0; }
   .est { color: var(--warn); }
