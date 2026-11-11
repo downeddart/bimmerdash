@@ -560,3 +560,23 @@ def test_car_economy_costs_routes_and_mileage_limit(client):
     assert s["vehicles"][VIN]["mileage_limit_km"] is None
     bad = client.put(f"/api/vehicles/{VIN}/settings", json={"mileage_year_start": "March"})
     assert bad.status_code == 422
+
+
+def test_built_assets_are_compressed_and_cached(tmp_path, monkeypatch):
+    """Hashed build files are cached for good; the page itself is always revalidated."""
+    if not URL:
+        pytest.skip("BIMMERDASH_TEST_DATABASE_URL not set")
+    from bimmerdash_web import app as app_module
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "index.html").write_text("<!doctype html><title>bimmerdash</title>")
+    (tmp_path / "assets" / "index-abc123.js").write_text("console.log('x');\n" * 200)
+    monkeypatch.setattr(app_module, "STATIC_DIR", tmp_path)
+    monkeypatch.setenv("BIMMERDASH_AUTH", "off")
+    with TestClient(app_module.create_app(URL)) as c:
+        js = c.get("/assets/index-abc123.js", headers={"Accept-Encoding": "gzip"})
+        assert js.status_code == 200
+        assert js.headers["content-encoding"] == "gzip"
+        assert "immutable" in js.headers["cache-control"]
+        page = c.get("/fuel", headers={"Accept-Encoding": "gzip"})
+        assert page.headers["cache-control"] == "no-cache"

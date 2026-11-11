@@ -12,12 +12,22 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.gzip import GZipMiddleware
 
 from . import advisor, auth, derived, queries, settings, usage
 from .health import health as health_report
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
+
+
+class BuiltAssets(StaticFiles):
+    """Vite's build output. File names carry a content hash, so they never change."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
 
 
 def create_app(database_url: str | None = None) -> FastAPI:
@@ -37,6 +47,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
         openapi_url="/api/openapi.json",
         redoc_url=None,
     )
+    app.add_middleware(GZipMiddleware, minimum_size=1024)
     limiter = auth.RateLimiter()
 
     def current_user(token: str | None) -> str | None:
@@ -255,7 +266,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
 
     # Single-page app: real files from the build, everything else falls back to index.html.
     if (STATIC_DIR / "index.html").exists():
-        app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+        app.mount("/assets", BuiltAssets(directory=STATIC_DIR / "assets"), name="assets")
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):
@@ -264,7 +275,8 @@ def create_app(database_url: str | None = None) -> FastAPI:
             f = (STATIC_DIR / path).resolve()
             if path and f.is_file() and STATIC_DIR.resolve() in f.parents:
                 return FileResponse(f)
-            return FileResponse(STATIC_DIR / "index.html")
+            # Always revalidate the page, so a new release's asset names are picked up.
+            return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
     return app
 
