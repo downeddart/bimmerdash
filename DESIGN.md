@@ -10,6 +10,9 @@ colors:
   ok-green: "#3dd68c"
   ok-wash: "#10261b"
   alarm-red: "#ff6b6b"
+  alarm-wash: "#2a1414"
+  alarm-line: "#5c2626"
+  alarm-text: "#ffb4b4"
   garage-floor: "#0b0d10"
   nav-shadow: "#0e1014"
   panel: "#13161b"
@@ -18,7 +21,8 @@ colors:
   rule: "#1c2027"
   rule-strong: "#232a34"
   bar-track: "#2a3340"
-  idle-grey: "#4b5563"
+  control-edge: "#68717f"
+  idle-grey: "#68717f"
   headlight-white: "#e6e8eb"
   muted-steel: "#9ba3af"
 typography:
@@ -81,12 +85,12 @@ components:
     backgroundColor: "{colors.panel-top}"
     textColor: "{colors.headlight-white}"
     rounded: "{rounded.sm}"
-    padding: "7px 12px"
+    padding: "8px 14px"
     height: "40px"
   button-ghost:
     textColor: "{colors.muted-steel}"
     rounded: "{rounded.sm}"
-    padding: "7px 12px"
+    padding: "8px 14px"
     height: "40px"
   button-primary:
     backgroundColor: "{colors.dash-blue}"
@@ -190,6 +194,8 @@ A near-monochrome blue-black garage, lit by one instrument blue and three state 
   within target.
 - **Alarm Red** (`alarm-red`, CSS `--bad`): overdue, very low, failed. Text and dots
   only; never a large fill.
+- **Alarm Wash, Alarm Line, Alarm Text** (`alarm-wash`, `alarm-line`, `alarm-text`, CSS
+  `--bad-bg`, `--bad-line`, `--bad-text`): error boxes and inline error messages.
 
 ### Neutral
 - **Garage Floor** (`garage-floor`): page background, input and segmented-control wells.
@@ -201,7 +207,10 @@ A near-monochrome blue-black garage, lit by one instrument blue and three state 
 - **Rule** (`rule`) and **Rule Strong** (`rule-strong`): card borders and dividers;
   input, button and hero borders.
 - **Bar Track** (`bar-track`): unfilled part of progress bars.
-- **Idle Grey** (`idle-grey`): dots and markers for cleared, unknown or inactive items.
+- **Control Edge** (`control-edge`, CSS `--control-line`): the border of inputs and
+  selects and the edge of a selected segment; at least 3:1 against every panel.
+- **Idle Grey** (`idle-grey`, CSS `--idle`): dots and markers for cleared, unknown or
+  inactive items; at least 3:1 against every panel.
 - **Headlight White** (`headlight-white`): primary text.
 - **Muted Steel** (`muted-steel`): labels, units, explanations, inactive nav links.
 
@@ -215,6 +224,9 @@ is a bug.
 
 **The Layer, Don't Light Rule.** Depth comes from stepping up through Garage Floor →
 Panel → Panel Raised → Panel Top, never from glows or shadows.
+
+**The Edges Are Visible Rule.** Tonal steps are for surfaces. Anything a user operates
+(fields, selected options) is outlined in Control Edge so it reads at 3:1.
 
 ## Typography
 
@@ -291,8 +303,9 @@ Quiet, bordered, and small; the interface has almost no loud buttons.
 ### Segmented control
 The unit switcher (miles or kilometres, mpg or L/100 km), on Fuel and Settings.
 - **Style:** a full-pill well in Garage Floor with a Rule Strong border and 3px inset.
-- **States:** options are Muted Steel text; the selected option fills with Panel Top and
-  Headlight White text. `aria-pressed` reflects the state.
+- **States:** options are Muted Steel text; the selected option fills with Panel Top,
+  gains a 1px Control Edge border and Headlight White text. `aria-pressed` reflects the
+  state.
 
 ### Pills and tags
 - **Pill:** full-pill status chip, 12px weight 500. Neutral on Panel Top; OK on OK Wash
@@ -309,7 +322,8 @@ The unit switcher (miles or kilometres, mpg or L/100 km), on Fuel and Settings.
   a 1px Rule top border and no outer frame.
 
 ### Inputs / Fields
-- **Style:** Garage Floor well, 1px Rule Strong border, 10px radius, 42–44px tall.
+- **Style:** Garage Floor well, 1px Control Edge border, 10px radius, 42–44px tall.
+  Placeholders in Muted Steel. Shared styles live in `app.css`; pages set widths only.
 - **Focus:** border turns Dash Blue; the global focus ring is a 2px Dash Blue outline at
   2px offset.
 - **Settings rows:** label and explanation on the left, control on the right, rows
@@ -344,6 +358,8 @@ colour at the right.
   Steel caption below.
 - **Do** mark every estimate in Amber with a label ("~£", "UK avg", "assumed").
 - **Do** use the CSS variables in `app.css`; add a variable before reusing a new hex.
+- **Do** give charts a text equivalent: each bar is a list item with its value in a
+  visually hidden label.
 - **Do** keep interactive targets at 40px or taller and keep the 2px Dash Blue focus
   ring.
 - **Do** build new components toward the tighter end of the radius scale (6–12px).
@@ -355,3 +371,6 @@ colour at the right.
 - **Don't** introduce a second accent hue; use a state colour or neutral.
 - **Don't** show an estimated number in white or grey.
 - **Don't** fill large areas with Alarm Red; red is for text and dots.
+- **Don't** mark state with a thick coloured side border; use the state dot.
+- **Don't** wrap readable text in `role="img"`; it hides the values from screen
+  readers.
