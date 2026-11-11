@@ -35,14 +35,15 @@
     return { text: 'All good', cls: 'ok' };
   });
 
-  function due(s) {
-    if (!s.due) return null;
-    const d = new Date(s.due);
-    const days = Math.round((d - Date.now()) / 86400000);
-    const month = d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
-    if (days < 0) return `was due ${month}`;
-    if (days < 60) return `${month} · ${days} days`;
-    return `${month} · ${Math.round(days / 30.4)} months`;
+  function dueMonth(s) {
+    return s.due ? new Date(s.due).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : DASH;
+  }
+  function dueIn(s) {
+    if (!s.due) return 'no date given';
+    const days = Math.round((new Date(s.due) - Date.now()) / 86400000);
+    if (days < 0) return `${-days} days overdue`;
+    if (days < 60) return `in ${days} days`;
+    return `in ${Math.round(days / 30.4)} months`;
   }
 
   const psi = (kpa) => (kpa == null ? DASH : num(kpa * PSI));
@@ -57,11 +58,8 @@
 </script>
 
 <header>
-  <div>
-    <div class="eyebrow plain">Service, tyres and warnings</div>
-    <h1>Health</h1>
-  </div>
-  {#if summary}<span class="pill {summary.cls}">{summary.text}</span>{/if}
+  <h1>Health</h1>
+  {#if summary}<span class="pill {summary.cls}"><span class="dot" style:background="currentColor" aria-hidden="true"></span>{summary.text}</span>{/if}
 </header>
 
 {#if error}
@@ -82,20 +80,21 @@
       {#if !h.services.length}
         <p class="muted">Not reported yet.</p>
       {:else}
-        <ul class="list">
-          {#each h.services as s}
-            <li>
-              <span class="dot" style:background={STATE[s.state].colour}></span>
-              <div class="grow">
-                <div class="name">{s.name}</div>
-                <div class="small muted">
-                  {[due(s), s.distance_km != null ? `or ${num(toUnit(s.distance_km, prefs.distance))} ${distUnit(prefs.distance)}` : null].filter(Boolean).join(', ') || 'no date given'}
-                </div>
-              </div>
-              <span class="small state" style:color={STATE[s.state].colour}>{STATE[s.state].label}</span>
-            </li>
-          {/each}
-        </ul>
+        <table class="sched">
+          <thead>
+            <tr><th scope="col">Item</th><th scope="col">Due</th><th scope="col" class="r dist-col">Or in</th><th scope="col" class="r"><span class="sr-only">State</span></th></tr>
+          </thead>
+          <tbody>
+            {#each h.services as s}
+              <tr>
+                <th scope="row"><span class="dot" style:background={STATE[s.state].colour} aria-hidden="true"></span>{s.name}</th>
+                <td><span class="num">{dueMonth(s)}</span><span class="small muted">{dueIn(s)}{#if s.distance_km != null}<span class="dist-inline">{` · ${num(toUnit(s.distance_km, prefs.distance))} ${distUnit(prefs.distance)}`}</span>{/if}</span></td>
+                <td class="r num dist-col">{s.distance_km != null ? `${num(toUnit(s.distance_km, prefs.distance))} ${distUnit(prefs.distance)}` : DASH}</td>
+                <td class="r state" style:color={STATE[s.state].colour}>{STATE[s.state].label}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       {/if}
     </div>
 
@@ -113,13 +112,18 @@
             <div class="wheel" class:front={pos.startsWith('front')} style:--c={w ? STATE[w.state].colour : 'var(--idle)'}>
               <span class="small muted wheel-name"><span class="dot" style:background="var(--c)" aria-hidden="true"></span>{label}{#if w && w.state !== 'ok'}<span class="sr-only">, {STATE[w.state].label}</span>{/if}</span>
               <span class="num big">{w ? psi(w.kpa) : DASH}{#if w}<span class="sr-only"> psi</span>{/if}</span>
-              {#if w?.target_kpa}
-                <span class="small muted">target {psi(w.target_kpa)}{w.below_target_pct > 0 ? ` · ${num(w.below_target_pct)}% low` : ''}</span>
-              {/if}
-              {#if w?.temp_c != null}<span class="small muted">{num(w.temp_c)}°C</span>{/if}
+              <span class="small muted wheel-meta">
+                {#if w?.target_kpa}<span>target {psi(w.target_kpa)}</span>{#if w.below_target_pct > 0}<span style:color="var(--c)">−{num(w.below_target_pct)}%</span>{/if}{/if}
+                {#if w?.temp_c != null}<span>{num(w.temp_c)}°C</span>{/if}
+              </span>
             </div>
           {/each}
-          <div class="body" aria-hidden="true"></div>
+          <svg class="outline" viewBox="0 0 60 140" aria-hidden="true" preserveAspectRatio="none">
+            <rect x="8" y="4" width="44" height="132" rx="16" />
+            <path d="M14 40 Q30 32 46 40" />
+            <path d="M14 104 Q30 110 46 104" />
+            <line x1="30" y1="4" x2="30" y2="10" />
+          </svg>
         </div>
         {#if tyres.state === 'low' || tyres.state === 'very_low'}
           <p class="small warn-text">Below the pressure the car expects. Low tyres wear faster and use more fuel: check them when cold and pump them up to the placard pressure.</p>
@@ -136,7 +140,7 @@
       {#if !h.warnings}
         <p class="muted">Not reported yet.</p>
       {:else if !warnings.length}
-        <p class="okline"><span class="dot" style:background="var(--ok)"></span>No messages <span class="small muted">· {ago(h.warnings.time)}</span></p>
+        <ul class="kv"><li><span class="dot" style:background="var(--ok)" aria-hidden="true"></span><span class="k">No messages</span><span class="small muted">{ago(h.warnings.time)}</span></li></ul>
       {:else}
         <ul class="list">
           {#each warnings as w}
@@ -193,11 +197,22 @@
 {/if}
 
 <style>
-  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  header > div { display: flex; flex-direction: column; gap: 6px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap; }
   .note { display: flex; flex-direction: column; gap: 6px; }
   .two { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+
+  .sched { width: 100%; border-collapse: collapse; }
+  .sched th, .sched td { text-align: left; padding: 10px 8px; border-top: 1px solid var(--line); vertical-align: top; font-weight: 400; }
+  .sched thead th { border-top: 0; padding-top: 0; font-size: 12px; color: var(--muted); font-weight: 500; }
+  .sched tbody th { font-weight: 500; white-space: nowrap; }
+  .sched tbody th .dot { margin-right: 10px; vertical-align: 2px; }
+  .sched th:first-child, .sched td:first-child { padding-left: 0; }
+  .sched th:last-child, .sched td:last-child { padding-right: 0; }
+  .sched td .num { display: block; white-space: nowrap; }
+  .dist-inline { display: none; }
+  .sched .r { text-align: right; }
+  .state { font-weight: 600; font-size: 12px; white-space: nowrap; }
+
   .list { list-style: none; margin: 0; padding: 0; }
   .list li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
   .list li:first-child { border-top: 0; padding-top: 4px; }
@@ -205,18 +220,26 @@
   .list li.cleared .name { color: var(--muted); font-weight: 400; }
   .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .name { font-weight: 500; }
-  .state { font-weight: 600; white-space: nowrap; }
-  .okline { display: flex; align-items: center; gap: 10px; margin: 0; }
 
-  .car { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 72px; padding: 6px 0; }
-  .body { position: absolute; left: 50%; top: 8%; bottom: 8%; width: 48px; transform: translateX(-50%); border-radius: 22px 22px 14px 14px; border: 2px solid var(--line-2); background: var(--card-2); }
-  .wheel { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--card-2); border: 1px solid var(--line); }
+  /* Tyres: four readouts around a drawn outline of the car, nose up. */
+  .car { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 12px 76px; }
+  .outline { position: absolute; left: 50%; top: 6px; width: 52px; height: calc(100% - 12px); transform: translateX(-50%); fill: none; stroke: var(--line-2); stroke-width: 1.5; overflow: visible; }
+  .outline * { vector-effect: non-scaling-stroke; }
+  .wheel { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 8px; background: var(--card-2); border: 1px solid var(--line); }
   .wheel-name { display: flex; align-items: center; gap: 8px; }
-  .big { font-size: 26px; color: var(--c); }
+  .wheel-meta { display: flex; flex-wrap: wrap; gap: 0 10px; }
+  .big { font-size: 28px; color: var(--c); }
   .warn-text { color: var(--warn); }
 
-  .faults { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
+  .faults { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
   .codes { font-family: ui-monospace, monospace; word-break: break-word; color: var(--muted); }
-  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
-  @media (max-width: 480px) { .car { gap: 12px 40px; } .body { width: 28px; } }
+  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 4px; }
+  @media (max-width: 480px) {
+    .car { gap: 10px 36px; }
+    .outline { width: 30px; }
+    .sched thead { display: none; }
+    .sched tbody th { white-space: normal; }
+    .dist-col { display: none; }
+    .dist-inline { display: inline; }
+  }
 </style>

@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { ago, num, title, shortDate, DASH, dist, distUnit, measure } from '../lib/format.js';
+  import { ago, num, title, shortDate, DASH, dist, distUnit } from '../lib/format.js';
   import { prefs } from '../lib/prefs.svelte.js';
   import { placeAt } from '../lib/geo.js';
   import MapView from '../components/MapView.svelte';
@@ -31,8 +31,13 @@
   );
   const maxKm = $derived(Math.max(1, ...weeks.map((w) => w.km)));
   const thisWeek = $derived(weeks.length ? weeks[weeks.length - 1].km : null);
-  // Fuel ring: circumference of r=62 is 389.6
-  const fuelDash = $derived(o?.fuel_percent != null ? (o.fuel_percent / 100) * 389.6 : 0);
+  const weekAvg = $derived(weeks.length ? weeks.reduce((a, w) => a + w.km, 0) / weeks.length : null);
+  const busiestWeek = $derived(weeks.length ? Math.max(...weeks.map((w) => w.km)) : null);
+  const serviceLine = $derived(
+    nextService
+      ? `${nextService.name} ${new Date(nextService.due).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}`
+      : null
+  );
 
   const statusItems = $derived(
     !o
@@ -82,57 +87,78 @@
 
 {#if o}
   <header>
-    <div>
-      <div class="eyebrow plain">{[vehicle.model_name, vehicle.body_type, vehicle.series].filter(Boolean).join(' · ')}</div>
-      <h1>{headline}</h1>
+    <h1>{headline}</h1>
+    <div class="head-meta">
+      {#if locked}<span class="pill ok"><span class="dot" style:background="var(--ok)" aria-hidden="true"></span>All doors secured</span>{/if}
+      <span class="small muted">updated {ago(o.updated_at)}</span>
     </div>
-    {#if locked}<span class="pill ok">All doors secured</span>{/if}
   </header>
 
-  <section class="hero" aria-label="Your car">
-    {#if vehicle.has_image && imageOk}
-      <div class="floor" aria-hidden="true"></div>
-      <img src={api.imageUrl(vehicle.vin)} alt={`${name}${vehicle.colour ? ' in ' + vehicle.colour : ''}`} onerror={() => (imageOk = false)} />
-    {/if}
-    <div class="hero-bar">
-      <div class="hero-name">
-        <span class="num">{name}</span>
-        <span class="muted">{[vehicle.colour, `updated ${ago(o.updated_at)}`].filter(Boolean).join(' · ')}</span>
+  <section class="bay" aria-label="Your car">
+    <div class="stage">
+      <div class="plate">
+        <span class="plate-name">{name}</span>
+        {#if vehicle.colour}<span class="small muted">{vehicle.colour}</span>{/if}
       </div>
-      <div class="hero-stats">
-        <div><span class="small muted">Fuel</span><span class="num" style:color="var(--fuel)">{o.fuel_percent != null ? `${num(o.fuel_percent)}%` : DASH}</span></div>
-        <div><span class="small muted">Range</span><span class="num">{measure(o.range, prefs.distance)}</span></div>
-        <div><span class="small muted">Odometer</span><span class="num">{measure(o.odometer, prefs.distance)}</span></div>
+      {#if vehicle.has_image && imageOk}
+        <img src={api.imageUrl(vehicle.vin)} alt={`${name}${vehicle.colour ? ' in ' + vehicle.colour : ''}`} onerror={() => (imageOk = false)} />
+      {/if}
+    </div>
+
+    <div class="strip">
+      <div class="readout fuel">
+        <span class="label">Fuel</span>
+        <span class="value" style:color="var(--fuel)">{o.fuel_percent != null ? `${num(o.fuel_percent)}%` : DASH}{#if o.fuel_litres}<span class="unit">{num(o.fuel_litres.value, 1)} L</span>{/if}</span>
+        <div class="gauge" role="img" aria-label={o.fuel_percent != null ? `Fuel ${num(o.fuel_percent)} percent` : 'Fuel level not reported yet'}>
+          <div class="gauge-fill" style:width={`${o.fuel_percent ?? 0}%`}></div>
+          <span class="tick" style:left="25%"></span><span class="tick" style:left="50%"></span><span class="tick" style:left="75%"></span>
+        </div>
+      </div>
+      <div class="readout">
+        <span class="label">Range</span>
+        <span class="value">{o.range ? dist(o.range.value, prefs.distance) : DASH}<span class="unit">{distUnit(prefs.distance)}</span></span>
+      </div>
+      <div class="readout">
+        <span class="label">Odometer</span>
+        <span class="value">{o.odometer ? dist(o.odometer.value, prefs.distance) : DASH}<span class="unit">{distUnit(prefs.distance)}</span></span>
+      </div>
+      <div class="readout">
+        <span class="label">This week</span>
+        <span class="value">{thisWeek != null ? dist(thisWeek, prefs.distance) : DASH}<span class="unit">{distUnit(prefs.distance)}</span></span>
       </div>
     </div>
   </section>
 
-  <section class="grid" style="--min: 340px">
-    <div class="card fuel">
-      <div class="ring">
-        <svg role="img" aria-label={o.fuel_percent != null ? `Fuel ${o.fuel_percent} percent` : 'Fuel level not reported yet'} width="148" height="148" viewBox="0 0 148 148">
-          <circle cx="74" cy="74" r="62" fill="none" stroke="#1f242c" stroke-width="12" />
-          {#if o.fuel_percent != null}
-            <circle cx="74" cy="74" r="62" fill="none" stroke="var(--fuel)" stroke-width="12" stroke-linecap="round" stroke-dasharray={`${fuelDash} 389.6`} transform="rotate(-90 74 74)" />
-          {/if}
-        </svg>
-        <div class="ring-label"><span class="num big">{o.fuel_percent != null ? `${num(o.fuel_percent)}%` : DASH}</span><span class="small muted">fuel</span></div>
-      </div>
-      <div class="fuel-facts">
-        <div><span class="muted">Range</span><span class="num mid">{o.range ? dist(o.range.value, prefs.distance) : DASH} <span class="unit">{distUnit(prefs.distance)}</span></span></div>
-        <div><span class="muted">In the tank</span><span class="num mid">{o.fuel_litres ? num(o.fuel_litres.value, 1) : DASH} <span class="unit">L</span></span></div>
-      </div>
+  <section class="pair">
+    <div class="card">
+      <div class="card-head"><h2>Car status</h2><span class="small muted">{o.is_moving ? 'moving' : 'parked'}</span></div>
+      <ul class="kv">
+        {#each statusItems as s}
+          <li>
+            <span class="dot" style:background={s.value == null ? 'var(--idle)' : s.good ? 'var(--ok)' : 'var(--warn)'} aria-hidden="true"></span>
+            <span class="k">{s.label}</span>
+            <span class="v" class:quiet={s.value == null}>{s.value == null ? 'Not reported yet' : s.raw ? s.value : title(s.value)}</span>
+          </li>
+        {/each}
+        <li>
+          <span class="dot" style:background={!health ? 'var(--idle)' : health.issues ? 'var(--warn)' : 'var(--ok)'} aria-hidden="true"></span>
+          <a class="k health-link" href="#/health">Health</a>
+          <span class="v" style:color={health?.issues ? 'var(--warn)' : undefined}>
+            {healthText ?? DASH}{#if serviceLine}<span class="small muted sub">{serviceLine}</span>{/if}
+          </span>
+        </li>
+      </ul>
     </div>
 
     <div class="card location">
-      <div class="loc-head">
+      <div class="card-head">
         <h2>{here ? `At ${here.name}` : 'Where it is'}</h2>
-        {#if o.location}<span class="small muted">heading {num(o.location.heading)}°</span>{/if}
+        {#if o.location?.heading != null}<span class="small muted">heading {num(o.location.heading)}°</span>{/if}
       </div>
       {#if o.location}
         <MapView
           markers={[{ lat: o.location.lat, lon: o.location.lon, colour: '#5aa2ff', radius: 9, label: here?.name ?? 'Your car' }]}
-          height={230}
+          height={262}
           label="Car location"
         />
       {:else}
@@ -141,97 +167,90 @@
     </div>
   </section>
 
-  <section class="grid" aria-label="Key stats">
-    <div class="card tile"><span class="muted">This week</span><span class="num tile-v">{thisWeek != null ? `${dist(thisWeek, prefs.distance)} ${distUnit(prefs.distance)}` : DASH}</span><span class="small muted">from odometer</span></div>
-    <a class="card tile link" href="#/health">
-      <span class="muted">Health</span>
-      <span class="num tile-v" style:color={health?.issues ? 'var(--warn)' : undefined}>{healthText ?? DASH}</span>
-      <span class="small muted">{nextService ? `${nextService.name} ${new Date(nextService.due).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' })}` : `next service ${measure(o.service_distance, prefs.distance)}`}</span>
-    </a>
-    <div class="card tile"><span class="muted">Odometer</span><span class="num tile-v">{o.odometer ? dist(o.odometer.value, prefs.distance) : DASH}</span><span class="small muted">{distUnit(prefs.distance)}</span></div>
-    <div class="card tile"><span class="muted">Status</span><span class="num tile-v">{o.is_moving ? 'Moving' : 'Parked'}</span><span class="small muted">updated {ago(o.updated_at)}</span></div>
-  </section>
-
-  <section class="grid" style="--min: 380px">
-    <div class="card">
-      <div class="card-head"><h2>Distance per week</h2><span class="small muted">{distUnit(prefs.distance)}, last 8 weeks</span></div>
-      {#if weeks.length}
-        <div class="bars" role="list" aria-label="Distance per week">
-          {#each weeks as w, i}
-            <div class="bar-col" role="listitem">
-              <span class="sr-only">Week of {shortDate(w.week_start)}: {dist(w.km, prefs.distance)} {distUnit(prefs.distance)}</span>
-              <span class="small muted" aria-hidden="true">{dist(w.km, prefs.distance)}</span>
-              <div class="bar" aria-hidden="true" style:height={`${Math.max(2, (w.km / maxKm) * 110)}px`} style:background={i === weeks.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
-              <span class="small muted" aria-hidden="true">{shortDate(w.week_start)}</span>
-            </div>
-          {/each}
+  <section class="card weekly">
+    <div class="card-head"><h2>Distance per week</h2><span class="small muted">{distUnit(prefs.distance)}, last {weeks.length || 8} weeks</span></div>
+    {#if weeks.length}
+      <div class="weekly-body">
+        <div class="weekly-facts">
+          <div class="readout"><span class="label">This week</span><span class="value">{dist(thisWeek, prefs.distance)}</span></div>
+          <div class="readout"><span class="label">Weekly average</span><span class="value">{dist(weekAvg, prefs.distance)}</span></div>
+          <div class="readout"><span class="label">Busiest week</span><span class="value">{dist(busiestWeek, prefs.distance)}</span></div>
         </div>
-      {:else}
-        <p class="muted">Builds up as odometer readings arrive.</p>
-      {/if}
-    </div>
-
-    <div class="card">
-      <h2>Car status</h2>
-      <div class="grid status" style="--min: 170px">
-        {#each statusItems as s}
-          <div class="status-item">
-            <span class="dot" style:background={s.value == null ? 'var(--idle)' : s.good ? 'var(--ok)' : 'var(--warn)'}></span>
-            <div><span class="small muted">{s.label}</span><span class="status-v">{s.value == null ? 'Not reported yet' : s.raw ? s.value : title(s.value)}</span></div>
+        <div class="chart">
+          <div class="bars" role="list" aria-label="Distance per week">
+            {#each weeks as w, i}
+              <div class="bar-col" role="listitem">
+                <span class="sr-only">Week of {shortDate(w.week_start)}: {dist(w.km, prefs.distance)} {distUnit(prefs.distance)}</span>
+                <span class="bar-v small" aria-hidden="true">{dist(w.km, prefs.distance)}</span>
+                <div class="bar" class:now={i === weeks.length - 1} aria-hidden="true" style:height={`${Math.max(2, (w.km / maxKm) * 100)}%`}></div>
+              </div>
+            {/each}
           </div>
-        {/each}
+          <div class="axis" class:sparse={weeks.length > 6} aria-hidden="true">
+            {#each weeks as w}<span class="small muted">{shortDate(w.week_start)}</span>{/each}
+          </div>
+        </div>
       </div>
-    </div>
+    {:else}
+      <p class="muted">Builds up as odometer readings arrive.</p>
+    {/if}
   </section>
 {:else}
   <div class="muted">Loading…</div>
 {/if}
 
 <style>
-  .location { display: flex; flex-direction: column; gap: 14px; }
-  .loc-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
-  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; }
-  header > div { display: flex; flex-direction: column; gap: 6px; }
+  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
+  .head-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
-  .hero { position: relative; min-height: 420px; border-radius: 24px; overflow: hidden; border: 1px solid var(--line-2); background: #1a2029; }
-  .floor { position: absolute; left: 50%; bottom: 112px; width: min(78%, 760px); height: 46px; transform: translateX(-50%); border-radius: 50%; background: #262e3a; }
-  .hero img { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); width: min(86%, 700px); height: auto; }
-  .hero-bar { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 24px; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-end; gap: 16px; background: #12161c; border-top: 1px solid var(--line-2); }
-  .hero-name { display: flex; flex-direction: column; gap: 4px; }
-  .hero-name .num { font-size: 24px; }
-  .hero-stats { display: flex; gap: 28px; flex-wrap: wrap; }
-  .hero-stats > div { display: flex; flex-direction: column; gap: 2px; }
-  .hero-stats .num { font-size: 20px; }
+  /* The garage bay: the car under one light, with its instrument strip beneath. */
+  .bay { border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; background: var(--card); }
+  .stage {
+    position: relative;
+    height: clamp(200px, 28vw, 300px);
+    background: #1a2029; /* the lit bay: one step bluer than the panels */
+    border-bottom: 1px solid var(--line-2);
+  }
+  .stage img { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); width: min(92%, 760px); height: auto; max-height: 88%; object-fit: contain; }
+  .plate { position: absolute; left: 20px; top: 16px; display: flex; flex-direction: column; gap: 2px; z-index: 1; }
+  .strip .unit { margin-left: 4px; }
+  .plate-name { font-family: var(--display); font-weight: 600; font-size: 17px; }
 
-  .fuel { display: flex; flex-wrap: wrap; gap: 28px; align-items: center; }
-  .ring { position: relative; width: 148px; height: 148px; flex: none; }
-  .ring-label { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-  .big { font-size: 34px; }
-  .mid { font-size: 26px; }
-  .fuel-facts { display: flex; flex-direction: column; gap: 18px; flex: 1 1 160px; }
-  .fuel-facts > div { display: flex; flex-direction: column; gap: 2px; }
+  .strip { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; }
+  .strip > .readout { padding: 16px 20px; border-left: 1px solid var(--line); }
+  .strip > .readout:first-child { border-left: 0; }
+  .gauge { position: relative; height: 6px; margin-top: 6px; border-radius: 2px; background: var(--bar); overflow: hidden; }
+  .gauge-fill { position: absolute; inset: 0 auto 0 0; background: var(--fuel); }
+  .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--card); }
 
-  .location { display: flex; flex-direction: column; gap: 10px; }
+  .pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: stretch; }
+  .location { display: flex; flex-direction: column; }
   .location p { margin: 0; }
+  .kv .v { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .kv .v.quiet { color: var(--muted); font-weight: 400; }
+  .health-link { color: var(--muted); padding: 13px 0; margin: -13px 0; }
+  .health-link:hover { color: var(--accent); }
+  .health-link::after { content: ' →'; }
+  .sub { font-weight: 400; }
 
-  .tile { display: flex; flex-direction: column; gap: 8px; padding: 18px 20px; border-radius: 16px; }
-  .tile-v { font-size: 26px; }
-  a.tile { color: var(--text); }
-  a.tile:hover { border-color: var(--line-2); }
+  .weekly-body { display: grid; grid-template-columns: 180px 1fr; gap: 24px; align-items: end; }
+  .weekly-facts { display: flex; flex-direction: column; gap: 16px; padding-right: 24px; border-right: 1px solid var(--line); }
+  .chart { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .bars { display: flex; align-items: flex-end; gap: 12px; height: 150px; border-bottom: 1px solid var(--line-2); }
+  .bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; min-width: 0; }
+  .bar { width: 100%; max-width: 40px; border-radius: 2px 2px 0 0; background: var(--bar); }
+  .bar.now { background: var(--accent); }
+  .bar-v { font-family: var(--display); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .axis { display: flex; gap: 12px; }
+  .axis > span { flex: 1 1 0; text-align: center; min-width: 0; white-space: nowrap; }
 
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 20px; }
-  .bars { display: flex; align-items: flex-end; gap: 10px; height: 170px; }
-  .bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; height: 100%; }
-  .bar { width: 100%; max-width: 36px; border-radius: 6px 6px 3px 3px; }
-
-  .status { margin-top: 18px; gap: 12px; }
-  .status-item { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 12px; background: var(--card-2); }
-  .status-item > div { display: flex; flex-direction: column; gap: 2px; }
-  .status-v { font-weight: 600; }
-
-  @media (max-width: 600px) {
-    .hero { min-height: 340px; }
-    .hero img { bottom: 150px; width: 92%; }
-    .floor { bottom: 160px; }
+  @media (max-width: 760px) {
+    .strip { grid-template-columns: 1fr 1fr; }
+    .strip > .readout:nth-child(3) { border-left: 0; }
+    .strip > .readout:nth-child(n + 3) { border-top: 1px solid var(--line); }
+    .weekly-body { grid-template-columns: 1fr; }
+    .weekly-facts { flex-direction: row; justify-content: space-between; padding: 0 0 16px; border-right: 0; border-bottom: 1px solid var(--line); }
+    .axis.sparse > span:nth-child(odd) { visibility: hidden; }
+    .stage { height: 200px; }
   }
 </style>
