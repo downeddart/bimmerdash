@@ -189,12 +189,13 @@
     <div class="card">
       <div class="card-head"><h2>Distance per month</h2><span class="small muted">{unit}</span></div>
       {#if months.length}
-        <div class="bars" role="img" aria-label="Distance per month">
+        <div class="bars" role="list" aria-label="Distance per month">
           {#each months as x, i}
-            <div class="bar-col">
-              <span class="small muted">{num(toUnit(x.km, prefs.distance))}</span>
-              <div class="bar" style:height={`${Math.max(3, (x.km / maxMonth) * 120)}px`} style:background={i === months.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
-              <span class="small muted">{monthName(x.month)}</span>
+            <div class="bar-col" role="listitem">
+              <span class="sr-only">{monthName(x.month)}: {num(toUnit(x.km, prefs.distance))} {unit}</span>
+              <span class="small muted" aria-hidden="true">{num(toUnit(x.km, prefs.distance))}</span>
+              <div class="bar" aria-hidden="true" style:height={`${Math.max(3, (x.km / maxMonth) * 120)}px`} style:background={i === months.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
+              <span class="small muted" aria-hidden="true">{monthName(x.month)}</span>
             </div>
           {/each}
         </div>
@@ -209,7 +210,7 @@
     <div class="card">
       <div class="card-head"><h2>When you drive</h2><span class="small muted">trip starts</span></div>
       <div class="heat-wrap">
-        <div class="heat" role="img" aria-label="Trips by day of week and hour">
+        <div class="heat" role="img" aria-label={`Trips by day of week and hour. ${busiest ?? 'Not enough trips yet to show a pattern.'}`}>
           <span></span>
           {#each Array(24) as _, h}<span class="hh small muted">{h % 6 === 0 ? String(h).padStart(2, '0') : ''}</span>{/each}
           {#each heat as row, d}
@@ -285,7 +286,7 @@
           {/each}
         </ul>
       </div>
-      {#if placeError}<p class="small bad" role="alert">{placeError}</p>{/if}
+      {#if placeError}<p class="small bad-text" role="alert">{placeError}</p>{/if}
       <p class="small muted">Named places label your trips and the car's location on Overview.</p>
     {/if}
   </div>
@@ -305,7 +306,7 @@
   .heat-wrap { overflow-x: auto; }
   .heat { display: grid; grid-template-columns: 32px repeat(24, minmax(10px, 1fr)); gap: 3px; min-width: 330px; align-items: center; }
   .cell { aspect-ratio: 1; border-radius: 3px; background: #1a1f27; }
-  .hh { font-size: 10px; text-align: left; }
+  .hh { font-size: 11px; text-align: left; }
   .dd { font-size: 11px; }
   .places { display: grid; gap: 16px; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; }
   @media (max-width: 900px) { .places { grid-template-columns: 1fr; } }
@@ -315,11 +316,7 @@
   .pname { font-weight: 500; }
   .actions { display: flex; gap: 6px; }
   .name-form { display: flex; gap: 6px; width: 100%; }
-  .name-form input { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 8px 10px; min-height: 40px; }
-  .btn { border: 1px solid var(--line-2); background: var(--card-3); border-radius: 10px; padding: 7px 12px; cursor: pointer; min-height: 40px; font-size: 13px; }
-  .btn:hover { border-color: var(--accent); }
-  .btn.ghost { background: none; color: var(--muted); }
-  .bad { color: #ffb4b4; }
+  .name-form input { flex: 1; min-width: 0; }
   .costs { display: flex; flex-wrap: wrap; gap: 16px 40px; margin-bottom: 8px; }
   .costs > div { display: flex; flex-direction: column; gap: 4px; }
   .limit-bar { position: relative; height: 14px; border-radius: 999px; background: var(--card-3); overflow: hidden; margin: 6px 0 12px; }
@@ -335,5 +332,5 @@
   th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 0 10px 10px; }
   td { padding: 11px 10px; border-top: 1px solid var(--line); }
   .r { text-align: right; }
-  .tag { display: inline-block; margin-left: 8px; padding: 1px 6px; border-radius: 6px; background: var(--card-3); color: var(--muted); font-size: 11px; }
+  .tag { margin-left: 8px; }
 </style>

@@ -34,7 +34,7 @@
     status?.last_message_at ? (Date.now() - new Date(status.last_message_at)) / 1000 : Infinity
   );
 
-  const DOT = { ok: 'var(--ok)', stale: 'var(--warn)', missing: 'var(--warn)', off: '#6b7280' };
+  const DOT = { ok: 'var(--ok)', stale: 'var(--warn)', missing: 'var(--warn)', off: 'var(--idle)' };
   let prices = $derived(status?.prices ?? null);
   let ukLabel = $derived.by(() => {
     const u = prices?.uk_averages;
@@ -50,6 +50,10 @@
     return st.status === 'stale'
       ? `Station prices stale (${ago(st.synced_at)})`
       : `Station prices ${ago(st.synced_at)}`;
+  });
+
+  $effect(() => {
+    document.title = signedIn ? `${routes[path].label} · bimmerdash` : 'Sign in · bimmerdash';
   });
 
   function currentPath() {
@@ -102,6 +106,7 @@
 {:else if !signedIn}
   <Login setup={authInfo.setup_required} onDone={checkAuth} />
 {:else}
+<a class="skip-link" href="#main" onclick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>Skip to content</a>
 <div class="shell">
   <nav aria-label="Main">
     <a class="brand" href="#/">
@@ -136,7 +141,7 @@
     </div>
     <div class="stream">
       <div class="row">
-        <span class="dot" style:background={streamAge < 3600 ? 'var(--ok)' : streamAge < 86400 ? 'var(--warn)' : '#6b7280'}></span>
+        <span class="dot" style:background={streamAge < 3600 ? 'var(--ok)' : streamAge < 86400 ? 'var(--warn)' : 'var(--idle)'}></span>
         {streamAge < 3600 ? 'Stream active' : status?.last_message_at ? 'Stream quiet' : 'No data yet'}
       </div>
       <div class="small muted">Last message {ago(status?.last_message_at)}</div>
@@ -153,7 +158,7 @@
     </div>
   </nav>
 
-  <main>
+  <main id="main" tabindex="-1">
     {#if path === '/settings'}
       <Settings {vehicle} account={authInfo} onSignedOut={checkAuth} />
     {:else if error}
@@ -209,6 +214,7 @@
     /* Keep the nav (and its status box) on screen while long pages scroll. */
     nav { position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; }
   }
+  main:focus { outline: none; }
   main { flex: 999 1 560px; min-width: 0; padding: 32px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 24px; }
 
   @media (max-width: 820px) {

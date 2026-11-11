@@ -156,12 +156,13 @@
     <div class="card">
       <div class="card-head"><h2>Distance per week</h2><span class="small muted">{distUnit(prefs.distance)}, last 8 weeks</span></div>
       {#if weeks.length}
-        <div class="bars" role="img" aria-label="Weekly distance bar chart">
+        <div class="bars" role="list" aria-label="Distance per week">
           {#each weeks as w, i}
-            <div class="bar-col">
-              <span class="small muted">{dist(w.km, prefs.distance)}</span>
-              <div class="bar" style:height={`${Math.max(2, (w.km / maxKm) * 110)}px`} style:background={i === weeks.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
-              <span class="small muted">{shortDate(w.week_start)}</span>
+            <div class="bar-col" role="listitem">
+              <span class="sr-only">Week of {shortDate(w.week_start)}: {dist(w.km, prefs.distance)} {distUnit(prefs.distance)}</span>
+              <span class="small muted" aria-hidden="true">{dist(w.km, prefs.distance)}</span>
+              <div class="bar" aria-hidden="true" style:height={`${Math.max(2, (w.km / maxKm) * 110)}px`} style:background={i === weeks.length - 1 ? 'var(--accent)' : 'var(--bar)'}></div>
+              <span class="small muted" aria-hidden="true">{shortDate(w.week_start)}</span>
             </div>
           {/each}
         </div>
@@ -175,7 +176,7 @@
       <div class="grid status" style="--min: 170px">
         {#each statusItems as s}
           <div class="status-item">
-            <span class="dot" style:background={s.value == null ? '#4b5563' : s.good ? 'var(--ok)' : 'var(--warn)'}></span>
+            <span class="dot" style:background={s.value == null ? 'var(--idle)' : s.good ? 'var(--ok)' : 'var(--warn)'}></span>
             <div><span class="small muted">{s.label}</span><span class="status-v">{s.value == null ? 'Not reported yet' : s.raw ? s.value : title(s.value)}</span></div>
           </div>
         {/each}

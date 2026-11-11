@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-11T14:11:19+00:00",
+  "generatedAt": "2026-11-11T14:30:41+00:00",
   "title": "Design System: bimmerdash",
   "extensions": {
     "colorMeta": {
@@ -132,6 +132,54 @@
           "#ffdbd7"
         ]
       },
+      "alarm-wash": {
+        "role": "neutral",
+        "displayName": "Alarm Wash",
+        "canonical": "#2a1414",
+        "oklch": "oklch(22.3% 0.036 20)",
+        "tonalRamp": [
+          "#0f0a0a",
+          "#2c2222",
+          "#4e3d3d",
+          "#715b5a",
+          "#977a79",
+          "#b79e9d",
+          "#d7c4c3",
+          "#f9ebea"
+        ]
+      },
+      "alarm-line": {
+        "role": "neutral",
+        "displayName": "Alarm Line",
+        "canonical": "#5c2626",
+        "oklch": "oklch(34.6% 0.080 22)",
+        "tonalRamp": [
+          "#130807",
+          "#341e1d",
+          "#5a3736",
+          "#835250",
+          "#ad6f6d",
+          "#ca9693",
+          "#e7bdbb",
+          "#ffe6e4"
+        ]
+      },
+      "alarm-text": {
+        "role": "neutral",
+        "displayName": "Alarm Text",
+        "canonical": "#ffb4b4",
+        "oklch": "oklch(84.1% 0.088 19)",
+        "tonalRamp": [
+          "#130708",
+          "#361d1d",
+          "#5c3636",
+          "#855051",
+          "#b06d6e",
+          "#cd9494",
+          "#eabcbb",
+          "#ffe5e5"
+        ]
+      },
       "garage-floor": {
         "role": "neutral",
         "displayName": "Garage Floor",
@@ -260,20 +308,36 @@
           "#eaeff6"
         ]
       },
+      "control-edge": {
+        "role": "neutral",
+        "displayName": "Control Edge",
+        "canonical": "#68717f",
+        "oklch": "oklch(54.6% 0.024 259)",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#22252a",
+          "#3d424a",
+          "#5a626d",
+          "#7a8391",
+          "#9ea6b2",
+          "#c3cad3",
+          "#eaeff5"
+        ]
+      },
       "idle-grey": {
         "role": "neutral",
         "displayName": "Idle Grey",
-        "canonical": "#4b5563",
-        "oklch": "oklch(44.6% 0.026 257)",
+        "canonical": "#68717f",
+        "oklch": "oklch(54.6% 0.024 259)",
         "tonalRamp": [
-          "#090b0e",
-          "#21252b",
-          "#3c424b",
-          "#5a626e",
-          "#798392",
-          "#9da6b2",
-          "#c3cad4",
-          "#eaeff6"
+          "#0a0b0e",
+          "#22252a",
+          "#3d424a",
+          "#5a626d",
+          "#7a8391",
+          "#9ea6b2",
+          "#c3cad3",
+          "#eaeff5"
         ]
       },
       "headlight-white": {
@@ -393,7 +457,7 @@
       "refersTo": "button",
       "description": "Default quiet bordered button for actions inside cards.",
       "html": "<button class=\"ds-btn\">Save</button>",
-      "css": ".ds-btn { font: 13px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); background: var(--card-3, #1a1f27); border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 7px 12px; min-height: 40px; cursor: pointer; white-space: nowrap; } .ds-btn:hover { border-color: var(--accent, #5aa2ff); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+      "css": ".ds-btn { font: 13px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); background: var(--card-3, #1a1f27); border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 8px 14px; min-height: 40px; cursor: pointer; white-space: nowrap; } .ds-btn:hover { border-color: var(--accent, #5aa2ff); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
     },
     {
       "name": "Ghost Button",
@@ -401,7 +465,7 @@
       "refersTo": "button-ghost",
       "description": "Secondary actions: cancel, hide, forget.",
       "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
-      "css": ".ds-btn-ghost { font: 13px Inter, system-ui, sans-serif; color: var(--muted, #9ba3af); background: none; border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 7px 12px; min-height: 40px; cursor: pointer; } .ds-btn-ghost:hover { border-color: var(--accent, #5aa2ff); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+      "css": ".ds-btn-ghost { font: 13px Inter, system-ui, sans-serif; color: var(--muted, #9ba3af); background: none; border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 8px 14px; min-height: 40px; cursor: pointer; } .ds-btn-ghost:hover { border-color: var(--accent, #5aa2ff); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
     },
     {
       "name": "Primary Button",
@@ -417,7 +481,7 @@
       "refersTo": "input",
       "description": "Text and number fields in Settings and Login.",
       "html": "<input class=\"ds-input\" value=\"57\" aria-label=\"Tank size in litres\">",
-      "css": ".ds-input { font: 14px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); background: var(--bg, #0b0d10); border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 9px 12px; min-height: 42px; width: 120px; } .ds-input:focus { border-color: var(--accent, #5aa2ff); outline: none; }"
+      "css": ".ds-input { font: 14px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); background: var(--bg, #0b0d10); border: 1px solid var(--control-line, #68717f); border-radius: 10px; padding: 9px 12px; min-height: 42px; width: 120px; } .ds-input:focus { border-color: var(--accent, #5aa2ff); outline: none; }"
     },
     {
       "name": "Segmented Control",
@@ -425,7 +489,7 @@
       "refersTo": "segmented",
       "description": "Unit switcher: miles or km, mpg or L/100 km.",
       "html": "<div class=\"ds-seg\"><button class=\"on\" aria-pressed=\"true\">Miles</button><button aria-pressed=\"false\">Kilometres</button></div>",
-      "css": ".ds-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg, #0b0d10); border: 1px solid var(--line-2, #232a34); } .ds-seg button { font: 500 13px Inter, system-ui, sans-serif; border: 0; background: none; color: var(--muted, #9ba3af); padding: 8px 16px; border-radius: 999px; min-height: 40px; cursor: pointer; } .ds-seg button:hover { color: var(--text, #e6e8eb); } .ds-seg button.on { background: var(--card-3, #1a1f27); color: var(--text, #e6e8eb); } .ds-seg button:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+      "css": ".ds-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg, #0b0d10); border: 1px solid var(--line-2, #232a34); } .ds-seg button { font: 500 13px Inter, system-ui, sans-serif; border: 0; background: none; color: var(--muted, #9ba3af); padding: 8px 16px; border-radius: 999px; min-height: 40px; cursor: pointer; } .ds-seg button:hover { color: var(--text, #e6e8eb); } .ds-seg button.on { background: var(--card-3, #1a1f27); box-shadow: none; outline: 1px solid var(--control-line, #68717f); outline-offset: -1px; color: var(--text, #e6e8eb); } .ds-seg button:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
     },
     {
       "name": "Status Pills and Estimate Tag",
@@ -487,6 +551,11 @@
         "section": "colors"
       },
       {
+        "name": "The Edges Are Visible Rule",
+        "body": "Tonal steps are for surfaces. Anything a user operates (fields, selected options) is outlined in Control Edge so it reads at 3:1.",
+        "section": "colors"
+      },
+      {
         "name": "The Figures Are Grotesk Rule",
         "body": "Every number a user reads as a measurement (miles, mpg, \u00a3, psi, %) is set in Space Grotesk via the `num` class. Prose numbers stay in Inter.",
         "section": "typography"
@@ -506,6 +575,7 @@
       "Do lead every card with one figure in Space Grotesk and explain it in a Muted Steel caption below.",
       "Do mark every estimate in Amber with a label (\"~\u00a3\", \"UK avg\", \"assumed\").",
       "Do use the CSS variables in `app.css`; add a variable before reusing a new hex.",
+      "Do give charts a text equivalent: each bar is a list item with its value in a visually hidden label.",
       "Do keep interactive targets at 40px or taller and keep the 2px Dash Blue focus ring.",
       "Do build new components toward the tighter end of the radius scale (6\u201312px)."
     ],
@@ -514,7 +584,9 @@
       "Don't add shadows, glows or gradients to create depth.",
       "Don't introduce a second accent hue; use a state colour or neutral.",
       "Don't show an estimated number in white or grey.",
-      "Don't fill large areas with Alarm Red; red is for text and dots."
+      "Don't fill large areas with Alarm Red; red is for text and dots.",
+      "Don't mark state with a thick coloured side border; use the state dot.",
+      "Don't wrap readable text in `role=\"img\"`; it hides the values from screen readers."
     ]
   }
 }

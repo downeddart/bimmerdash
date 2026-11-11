@@ -161,14 +161,15 @@
     <div class="card">
       <div class="card-head"><h2>Monthly spend</h2><span class="small muted">fuel only</span></div>
       {#if months.length}
-        <div class="bars" role="img" aria-label="Fuel spend per month">
+        <div class="bars" role="list" aria-label="Fuel spend per month">
           {#each months as m}
-            <div class="bar-col">
-              <span class="small muted">{money(m.cost)}</span>
-              <div class="bar" style:height={`${Math.max(3, (m.cost / maxMonth) * 120)}px`}>
+            <div class="bar-col" role="listitem">
+              <span class="sr-only">{monthName(m.month)}: {money(m.cost)}{m.estimated ? `, of which ${money(m.estimated)} estimated from UK averages` : ''}</span>
+              <span class="small muted" aria-hidden="true">{money(m.cost)}</span>
+              <div class="bar" aria-hidden="true" style:height={`${Math.max(3, (m.cost / maxMonth) * 120)}px`}>
                 {#if m.estimated}<div class="bar-est" style:height={`${(m.estimated / m.cost) * 100}%`}></div>{/if}
               </div>
-              <span class="small muted">{monthName(m.month)}</span>
+              <span class="small muted" aria-hidden="true">{monthName(m.month)}</span>
             </div>
           {/each}
         </div>
@@ -242,7 +243,7 @@
                   {#if f.price_ppl != null}
                     {#if isAvg(f)}
                       <div class="small est" title="UK weekly average (DESNZ), not this station's price">
-                        <span class="tag">UK avg</span> {num(f.price_ppl, 1)}p/L: UK weekly average (DESNZ), not this station's price
+                        <span class="tag est">UK avg</span> {num(f.price_ppl, 1)}p/L: UK weekly average (DESNZ), not this station's price
                       </div>
                     {:else}
                       <div class="small muted">{num(f.price_ppl, 1)}p/L · {SOURCE[f.price_source]}</div>
@@ -266,9 +267,6 @@
 
 <style>
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--card); border: 1px solid var(--line); }
-  .seg button { border: 0; background: none; padding: 8px 14px; border-radius: 999px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; min-height: 36px; }
-  .seg button.on { background: var(--card-3); color: var(--text); }
   .tile { display: flex; flex-direction: column; gap: 6px; padding: 20px; }
   .tile-v { font-size: 26px; }
   .advisor { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
@@ -282,7 +280,6 @@
   .adv-text p { margin: 4px 0 0; }
   .est { color: var(--warn); }
   .est-bg { background: var(--warn); }
-  .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; background: #2a2212; color: var(--warn); font-size: 11px; font-weight: 600; }
   .two { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
   .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
   .bars { display: flex; align-items: flex-end; gap: 10px; height: 180px; }

@@ -22,7 +22,7 @@
     overdue: { label: 'Overdue', colour: 'var(--bad)' },
     low: { label: 'Low', colour: 'var(--warn)' },
     very_low: { label: 'Very low', colour: 'var(--bad)' },
-    unknown: { label: 'No target', colour: '#6b7280' },
+    unknown: { label: 'No target', colour: 'var(--muted)' },
   };
   const KIND = { left_open: 'Left open', low_fuel: 'Fuel', tyre: 'Tyres', service: 'Service', warning: 'Warning' };
 
@@ -107,12 +107,12 @@
       {#if !tyres}
         <p class="muted">Not reported yet. The car sends pressures every so often while driving.</p>
       {:else}
-        <div class="car" role="img" aria-label="Tyre pressures by wheel">
+        <div class="car" role="group" aria-label="Tyre pressures by wheel">
           {#each WHEELS as [pos, label]}
             {@const w = tyres.wheels[pos]}
-            <div class="wheel" class:front={pos.startsWith('front')} style:--c={w ? STATE[w.state].colour : '#4b5563'}>
-              <span class="small muted">{label}</span>
-              <span class="num big">{w ? psi(w.kpa) : DASH}</span>
+            <div class="wheel" class:front={pos.startsWith('front')} style:--c={w ? STATE[w.state].colour : 'var(--idle)'}>
+              <span class="small muted wheel-name"><span class="dot" style:background="var(--c)" aria-hidden="true"></span>{label}{#if w && w.state !== 'ok'}<span class="sr-only">, {STATE[w.state].label}</span>{/if}</span>
+              <span class="num big">{w ? psi(w.kpa) : DASH}{#if w}<span class="sr-only"> psi</span>{/if}</span>
               {#if w?.target_kpa}
                 <span class="small muted">target {psi(w.target_kpa)}{w.below_target_pct > 0 ? ` · ${num(w.below_target_pct)}% low` : ''}</span>
               {/if}
@@ -176,7 +176,7 @@
         <ul class="list">
           {#each h.alerts.recent as a}
             <li class:cleared={a.cleared_at}>
-              <span class="dot" style:background={a.cleared_at ? '#4b5563' : 'var(--warn)'}></span>
+              <span class="dot" style:background={a.cleared_at ? 'var(--idle)' : 'var(--warn)'}></span>
               <div class="grow">
                 <div class="name">{a.title}</div>
                 <div class="small muted">{a.message}</div>
@@ -195,7 +195,6 @@
 <style>
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
   header > div { display: flex; flex-direction: column; gap: 6px; }
-  .pill.warn { background: #2a2212; color: var(--warn); }
   .note { display: flex; flex-direction: column; gap: 6px; }
   .two { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); }
   .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
@@ -203,7 +202,7 @@
   .list li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); }
   .list li:first-child { border-top: 0; padding-top: 4px; }
   .list .dot { margin-top: 6px; }
-  .list li.cleared { opacity: 0.6; }
+  .list li.cleared .name { color: var(--muted); font-weight: 400; }
   .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
   .name { font-weight: 500; }
   .state { font-weight: 600; white-space: nowrap; }
@@ -211,15 +210,13 @@
 
   .car { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 72px; padding: 6px 0; }
   .body { position: absolute; left: 50%; top: 8%; bottom: 8%; width: 48px; transform: translateX(-50%); border-radius: 22px 22px 14px 14px; border: 2px solid var(--line-2); background: var(--card-2); }
-  .wheel { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--card-2); border-left: 4px solid var(--c); }
+  .wheel { display: flex; flex-direction: column; gap: 2px; padding: 12px 14px; border-radius: 12px; background: var(--card-2); border: 1px solid var(--line); }
+  .wheel-name { display: flex; align-items: center; gap: 8px; }
   .big { font-size: 26px; color: var(--c); }
   .warn-text { color: var(--warn); }
 
   .faults { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); }
   .codes { font-family: ui-monospace, monospace; word-break: break-word; color: var(--muted); }
-  .btn { border: 1px solid var(--line-2); background: var(--card-3); border-radius: 10px; padding: 7px 12px; cursor: pointer; min-height: 40px; font-size: 13px; white-space: nowrap; }
-  .btn.ghost { background: none; color: var(--muted); }
-  .btn:hover { border-color: var(--accent); }
   code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
   @media (max-width: 480px) { .car { gap: 12px 40px; } .body { width: 28px; } }
 </style>

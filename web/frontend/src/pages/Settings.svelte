@@ -128,7 +128,7 @@
 </header>
 
 {#if error}
-  <div class="card err" role="alert">Could not save: {error}</div>
+  <div class="card err-box" role="alert">Could not save: {error}</div>
 {/if}
 
 {#if !all}
@@ -230,7 +230,7 @@
 
       <div class="field">
         <div><div class="label">Alerts</div><div class="small muted">Turn all of them off or on</div></div>
-        <label class="switch"><input type="checkbox" checked={al.enabled} onchange={(e) => setAlerts({ enabled: e.currentTarget.checked })} /><span>{al.enabled ? 'On' : 'Off'}</span></label>
+        <label class="switch"><input type="checkbox" checked={al.enabled} onchange={(e) => setAlerts({ enabled: e.currentTarget.checked })} aria-label="All alerts" /><span aria-hidden="true">{al.enabled ? 'On' : 'Off'}</span></label>
       </div>
       {#each ALERTS as [key, label, hint]}
         <div class="field" class:dim={!al.enabled}>
@@ -247,7 +247,7 @@
                 {#each [5, 10, 15, 30, 60] as m}<option value={m}>{m} min</option>{/each}
               </select>
             {/if}
-            <label class="switch"><input type="checkbox" checked={al[key]} disabled={!al.enabled} onchange={(e) => setAlerts({ [key]: e.currentTarget.checked })} aria-label={label} /><span>{al[key] ? 'On' : 'Off'}</span></label>
+            <label class="switch"><input type="checkbox" checked={al[key]} disabled={!al.enabled} onchange={(e) => setAlerts({ [key]: e.currentTarget.checked })} aria-label={label} /><span aria-hidden="true">{al[key] ? 'On' : 'Off'}</span></label>
           </div>
         </div>
       {/each}
@@ -269,7 +269,7 @@
         <div class="inline">
           <button class="btn" type="submit">Change password</button>
           {#if pwMsg}<span class="ok small" role="status">{pwMsg}</span>{/if}
-          {#if pwErr}<span class="bad small" role="alert">{pwErr}</span>{/if}
+          {#if pwErr}<span class="bad-text small" role="alert">{pwErr}</span>{/if}
         </div>
       </form>
     </section>
@@ -286,25 +286,18 @@
   section { display: flex; flex-direction: column; gap: 4px; max-width: 760px; }
   .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
   .ok { color: var(--ok); }
-  .err { border-color: #5c2626; color: #ffb4b4; max-width: 760px; }
+  .err-box { max-width: 760px; }
   .field { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding: 16px 0; border-top: 1px solid var(--line); }
   .field:first-of-type { border-top: 0; }
   .field label { flex: 1 1 260px; }
   .field > div:first-child { flex: 1 1 260px; }
   .label { font-weight: 500; margin-bottom: 2px; }
-  .seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line-2); }
-  .seg button { border: 0; background: none; padding: 8px 16px; border-radius: 999px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; min-height: 40px; }
-  .seg button.on { background: var(--card-3); color: var(--text); }
-  select, input { font: inherit; color: var(--text); background: var(--bg); border: 1px solid var(--line-2); border-radius: 10px; padding: 9px 12px; min-height: 42px; }
   select { min-width: 240px; max-width: 100%; }
-  input { width: 90px; }
+  input:not([type='checkbox']) { width: 90px; }
   .inline { display: flex; align-items: center; gap: 8px; }
-  .btn { border: 1px solid var(--line-2); background: var(--card-3); border-radius: 10px; padding: 9px 16px; cursor: pointer; min-height: 42px; }
-  .btn:hover { border-color: var(--accent); }
   .pw { display: flex; flex-direction: column; gap: 12px; margin-top: 8px; max-width: 360px; }
   .pw label { display: flex; flex-direction: column; gap: 6px; }
   .pw input { width: 100%; }
-  .bad { color: #ffb4b4; }
   .inline.wrap { flex-wrap: wrap; }
   input.wide { width: 110px; }
   input.date { width: auto; }
@@ -312,7 +305,6 @@
   .field label.switch { flex: none; }
   .dim { opacity: 0.55; }
   .switch { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; min-height: 42px; }
-  .switch input { width: 20px; height: 20px; min-height: 0; padding: 0; accent-color: var(--accent); }
   .switch span { min-width: 26px; font-size: 13px; color: var(--muted); }
   code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
 </style>
