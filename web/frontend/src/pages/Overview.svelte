@@ -157,7 +157,7 @@
       </div>
       {#if o.location}
         <MapView
-          markers={[{ lat: o.location.lat, lon: o.location.lon, colour: '#5aa2ff', radius: 9, label: here?.name ?? 'Your car' }]}
+          markers={[{ lat: o.location.lat, lon: o.location.lon, colour: 'accent', radius: 9, label: here?.name ?? 'Your car' }]}
           height={262}
           label="Car location"
         />
@@ -208,7 +208,7 @@
   .stage {
     position: relative;
     height: clamp(200px, 28vw, 300px);
-    background: #1a2029; /* the lit bay: one step bluer than the panels */
+    background: var(--bay);
     border-bottom: 1px solid var(--line-2);
   }
   .stage img { position: absolute; left: 50%; bottom: 4%; transform: translateX(-50%); width: min(92%, 760px); height: auto; max-height: 88%; object-fit: contain; }

@@ -111,7 +111,7 @@
   <nav aria-label="Main">
     <a class="brand" href="#/">
       <span class="logo" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#0B0D10" stroke-width="2.4" stroke-linecap="round"><path d="M4 15a8 8 0 0 1 16 0" /><path d="M12 15l4-5" /></svg>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 15a8 8 0 0 1 16 0" /><path d="M12 15l4-5" /></svg>
       </span>
       bimmerdash
     </a>
@@ -201,7 +201,7 @@
     gap: 28px;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; color: var(--text); font-family: var(--display); font-weight: 600; font-size: 19px; }
-  .logo { width: 30px; height: 30px; border-radius: 8px; background: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; color: var(--bg); background: var(--accent); display: flex; align-items: center; justify-content: center; }
   .links { display: flex; flex-direction: column; gap: 4px; }
   .links a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; min-height: 44px; }
   .links a:hover { color: var(--text); }
