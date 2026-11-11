@@ -81,6 +81,27 @@ def test_migrate_is_idempotent(db):
     assert db.migrate() == []
 
 
+def test_concurrent_migrations_wait_for_each_other():
+    """Collector and prices start together; only one may apply the migrations."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    from bimmerdash.db import MIGRATION_LOCK
+
+    fresh_database()
+    holder = psycopg.connect(URL, autocommit=True)
+    holder.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK,))
+    dbs = [Database(URL) for _ in range(3)]
+    with ThreadPoolExecutor(3) as pool:
+        futures = [pool.submit(d.migrate) for d in dbs]
+        holder.execute("SELECT pg_sleep(0.5)")
+        assert not any(f.done() for f in futures)  # all waiting on the lock
+        holder.close()  # releases it
+        results = [f.result(timeout=60) for f in futures]
+    for d in dbs:
+        d.close()
+    assert sorted(len(r) for r in results) == [0, 0, 8]
+
+
 def test_migrations_are_committed(db):
     db.close()  # a migrate-only run (the `migrate` command) must leave the schema behind
     with psycopg.connect(URL) as c:
