@@ -1,0 +1,520 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-11T14:11:19+00:00",
+  "title": "Design System: bimmerdash",
+  "extensions": {
+    "colorMeta": {
+      "dash-blue": {
+        "role": "primary",
+        "displayName": "Dash Blue",
+        "canonical": "#5aa2ff",
+        "oklch": "oklch(70.7% 0.155 256)",
+        "tonalRamp": [
+          "#020b1b",
+          "#0b2545",
+          "#1a4275",
+          "#2961a8",
+          "#3c82dc",
+          "#6fa7f1",
+          "#a1ccff",
+          "#d2f1ff"
+        ]
+      },
+      "dash-blue-bright": {
+        "role": "primary",
+        "displayName": "Dash Blue Bright",
+        "canonical": "#8cbeff",
+        "oklch": "oklch(79.1% 0.107 255)",
+        "tonalRamp": [
+          "#040b16",
+          "#15263c",
+          "#284365",
+          "#3e6392",
+          "#5584c1",
+          "#81a8da",
+          "#adccf4",
+          "#dbf1ff"
+        ]
+      },
+      "dash-blue-wash": {
+        "role": "primary",
+        "displayName": "Dash Blue Wash",
+        "canonical": "#1a2130",
+        "oklch": "oklch(24.8% 0.030 265)",
+        "tonalRamp": [
+          "#0a0b0e",
+          "#22252c",
+          "#3d424d",
+          "#5a6170",
+          "#798295",
+          "#9ea5b5",
+          "#c3c9d6",
+          "#eaeff7"
+        ]
+      },
+      "amber": {
+        "role": "secondary",
+        "displayName": "Fuel Amber",
+        "canonical": "#f2b33d",
+        "oklch": "oklch(80.6% 0.147 79)",
+        "tonalRamp": [
+          "#130900",
+          "#362000",
+          "#5c3a00",
+          "#855700",
+          "#b07500",
+          "#cc9c46",
+          "#e9c386",
+          "#ffebc1"
+        ]
+      },
+      "amber-wash": {
+        "role": "secondary",
+        "displayName": "Amber Wash",
+        "canonical": "#2a2212",
+        "oklch": "oklch(25.7% 0.030 84)",
+        "tonalRamp": [
+          "#0d0b08",
+          "#28251e",
+          "#474137",
+          "#686052",
+          "#8b816f",
+          "#aca495",
+          "#cfc8bc",
+          "#f2eee5"
+        ]
+      },
+      "ok-green": {
+        "role": "tertiary",
+        "displayName": "OK Green",
+        "canonical": "#3dd68c",
+        "oklch": "oklch(77.9% 0.165 157)",
+        "tonalRamp": [
+          "#001005",
+          "#002f16",
+          "#00522a",
+          "#007740",
+          "#009e59",
+          "#51be84",
+          "#90ddaf",
+          "#c9fddc"
+        ]
+      },
+      "ok-wash": {
+        "role": "tertiary",
+        "displayName": "OK Wash",
+        "canonical": "#10261b",
+        "oklch": "oklch(24.6% 0.035 160)",
+        "tonalRamp": [
+          "#080c0a",
+          "#1f2722",
+          "#38463e",
+          "#53675c",
+          "#71897b",
+          "#96ab9f",
+          "#becec4",
+          "#e6f2eb"
+        ]
+      },
+      "alarm-red": {
+        "role": "tertiary",
+        "displayName": "Alarm Red",
+        "canonical": "#ff6b6b",
+        "oklch": "oklch(71.2% 0.181 23)",
+        "tonalRamp": [
+          "#1a0304",
+          "#441012",
+          "#732124",
+          "#a53437",
+          "#d94a4d",
+          "#f27d7a",
+          "#ffaca8",
+          "#ffdbd7"
+        ]
+      },
+      "garage-floor": {
+        "role": "neutral",
+        "displayName": "Garage Floor",
+        "canonical": "#0b0d10",
+        "oklch": "oklch(15.8% 0.007 258)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242527",
+          "#404244",
+          "#5f6165",
+          "#808287",
+          "#a3a5a9",
+          "#c7c9cc",
+          "#edeef0"
+        ]
+      },
+      "nav-shadow": {
+        "role": "neutral",
+        "displayName": "Nav Shadow",
+        "canonical": "#0e1014",
+        "oklch": "oklch(17.3% 0.009 264)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242527",
+          "#404245",
+          "#5f6165",
+          "#808288",
+          "#a3a5aa",
+          "#c7c9cd",
+          "#edeef1"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panel",
+        "canonical": "#13161b",
+        "oklch": "oklch(19.9% 0.011 261)",
+        "tonalRamp": [
+          "#0a0b0c",
+          "#242527",
+          "#404246",
+          "#5e6167",
+          "#7f8389",
+          "#a2a5ab",
+          "#c7c9ce",
+          "#edeef2"
+        ]
+      },
+      "panel-raised": {
+        "role": "neutral",
+        "displayName": "Panel Raised",
+        "canonical": "#171b22",
+        "oklch": "oklch(22.1% 0.015 262)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232528",
+          "#3f4247",
+          "#5d6168",
+          "#7d838c",
+          "#a1a5ad",
+          "#c6c9cf",
+          "#eceff3"
+        ]
+      },
+      "panel-top": {
+        "role": "neutral",
+        "displayName": "Panel Top",
+        "canonical": "#1a1f27",
+        "oklch": "oklch(23.8% 0.017 260)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232529",
+          "#3f4248",
+          "#5d6269",
+          "#7c838d",
+          "#a0a5ae",
+          "#c5c9d0",
+          "#eceff3"
+        ]
+      },
+      "rule": {
+        "role": "neutral",
+        "displayName": "Rule",
+        "canonical": "#1c2027",
+        "oklch": "oklch(24.3% 0.015 262)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#232528",
+          "#3f4247",
+          "#5d6168",
+          "#7e838b",
+          "#a1a5ad",
+          "#c6c9cf",
+          "#eceff3"
+        ]
+      },
+      "rule-strong": {
+        "role": "neutral",
+        "displayName": "Rule Strong",
+        "canonical": "#232a34",
+        "oklch": "oklch(28.3% 0.021 257)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#22252a",
+          "#3e4249",
+          "#5b626b",
+          "#7b838f",
+          "#9fa6b0",
+          "#c4cad2",
+          "#ebeff4"
+        ]
+      },
+      "bar-track": {
+        "role": "neutral",
+        "displayName": "Bar Track",
+        "canonical": "#2a3340",
+        "oklch": "oklch(31.8% 0.026 258)",
+        "tonalRamp": [
+          "#090b0e",
+          "#22252b",
+          "#3d424b",
+          "#5a626e",
+          "#798392",
+          "#9da6b3",
+          "#c3cad4",
+          "#eaeff6"
+        ]
+      },
+      "idle-grey": {
+        "role": "neutral",
+        "displayName": "Idle Grey",
+        "canonical": "#4b5563",
+        "oklch": "oklch(44.6% 0.026 257)",
+        "tonalRamp": [
+          "#090b0e",
+          "#21252b",
+          "#3c424b",
+          "#5a626e",
+          "#798392",
+          "#9da6b2",
+          "#c3cad4",
+          "#eaeff6"
+        ]
+      },
+      "headlight-white": {
+        "role": "neutral",
+        "displayName": "Headlight White",
+        "canonical": "#e6e8eb",
+        "oklch": "oklch(93.0% 0.005 258)",
+        "tonalRamp": [
+          "#0b0b0c",
+          "#242526",
+          "#414243",
+          "#606163",
+          "#818285",
+          "#a4a5a7",
+          "#c8c9cb",
+          "#eeeef0"
+        ]
+      },
+      "muted-steel": {
+        "role": "neutral",
+        "displayName": "Muted Steel",
+        "canonical": "#9ba3af",
+        "oklch": "oklch(71.3% 0.020 258)",
+        "tonalRamp": [
+          "#0a0b0d",
+          "#222529",
+          "#3e4249",
+          "#5c626b",
+          "#7b838e",
+          "#9fa6af",
+          "#c4c9d1",
+          "#ebeff4"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page titles only, one per page."
+      },
+      "numeral-lg": {
+        "displayName": "Numeral Large",
+        "purpose": "The headline figure of a tile."
+      },
+      "numeral": {
+        "displayName": "Numeral",
+        "purpose": "Secondary figures in stat blocks and the hero bar (18-24px)."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Card headings."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Base text, list rows, explanations."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Uppercase eyebrows above titles and tiles; a sentence-case variant for page subtitles."
+      },
+      "caption": {
+        "displayName": "Caption",
+        "purpose": "Sources, timestamps and context in Muted Steel."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "instant",
+        "value": "none",
+        "purpose": "No transitions: state changes (hover, selected) apply instantly."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "compact",
+        "value": "480px"
+      },
+      {
+        "name": "narrow",
+        "value": "600px"
+      },
+      {
+        "name": "nav-collapse",
+        "value": "820px"
+      },
+      {
+        "name": "wide",
+        "value": "960px"
+      }
+    ],
+    "cssVariables": {
+      "--bg": "garage-floor",
+      "--nav": "nav-shadow",
+      "--card": "panel",
+      "--card-2": "panel-raised",
+      "--card-3": "panel-top",
+      "--line": "rule",
+      "--line-2": "rule-strong",
+      "--text": "headlight-white",
+      "--muted": "muted-steel",
+      "--accent": "dash-blue",
+      "--accent-hover": "dash-blue-bright",
+      "--accent-bg": "dash-blue-wash",
+      "--fuel": "amber",
+      "--warn": "amber",
+      "--ok": "ok-green",
+      "--ok-bg": "ok-wash",
+      "--bad": "alarm-red",
+      "--bar": "bar-track"
+    }
+  },
+  "components": [
+    {
+      "name": "Button",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Default quiet bordered button for actions inside cards.",
+      "html": "<button class=\"ds-btn\">Save</button>",
+      "css": ".ds-btn { font: 13px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); background: var(--card-3, #1a1f27); border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 7px 12px; min-height: 40px; cursor: pointer; white-space: nowrap; } .ds-btn:hover { border-color: var(--accent, #5aa2ff); } .ds-btn:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Secondary actions: cancel, hide, forget.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { font: 13px Inter, system-ui, sans-serif; color: var(--muted, #9ba3af); background: none; border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 7px 12px; min-height: 40px; cursor: pointer; } .ds-btn-ghost:hover { border-color: var(--accent, #5aa2ff); } .ds-btn-ghost:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Sign in and account creation only.",
+      "html": "<button class=\"ds-btn-primary\">Sign in</button>",
+      "css": ".ds-btn-primary { font: 600 14px Inter, system-ui, sans-serif; color: #0b0d10; background: var(--accent, #5aa2ff); border: 0; border-radius: 10px; padding: 12px 24px; min-height: 46px; cursor: pointer; } .ds-btn-primary:hover { background: var(--accent-hover, #8cbeff); } .ds-btn-primary:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.6; cursor: default; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Text and number fields in Settings and Login.",
+      "html": "<input class=\"ds-input\" value=\"57\" aria-label=\"Tank size in litres\">",
+      "css": ".ds-input { font: 14px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); background: var(--bg, #0b0d10); border: 1px solid var(--line-2, #232a34); border-radius: 10px; padding: 9px 12px; min-height: 42px; width: 120px; } .ds-input:focus { border-color: var(--accent, #5aa2ff); outline: none; }"
+    },
+    {
+      "name": "Segmented Control",
+      "kind": "custom",
+      "refersTo": "segmented",
+      "description": "Unit switcher: miles or km, mpg or L/100 km.",
+      "html": "<div class=\"ds-seg\"><button class=\"on\" aria-pressed=\"true\">Miles</button><button aria-pressed=\"false\">Kilometres</button></div>",
+      "css": ".ds-seg { display: inline-flex; padding: 3px; border-radius: 999px; background: var(--bg, #0b0d10); border: 1px solid var(--line-2, #232a34); } .ds-seg button { font: 500 13px Inter, system-ui, sans-serif; border: 0; background: none; color: var(--muted, #9ba3af); padding: 8px 16px; border-radius: 999px; min-height: 40px; cursor: pointer; } .ds-seg button:hover { color: var(--text, #e6e8eb); } .ds-seg button.on { background: var(--card-3, #1a1f27); color: var(--text, #e6e8eb); } .ds-seg button:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Pills and Estimate Tag",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Status chips, and the amber tag that marks an estimate.",
+      "html": "<span class=\"ds-pill ds-pill-ok\"><span class=\"ds-dot\"></span>Locked</span> <span class=\"ds-pill ds-pill-warn\">1 thing to look at</span> <span class=\"ds-est\">~\u00a348.20</span> <span class=\"ds-tag\">UK avg</span>",
+      "css": ".ds-pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px; background: var(--card-3, #1a1f27); color: #c3c9d1; font: 500 12px Inter, system-ui, sans-serif; } .ds-pill-ok { background: var(--ok-bg, #10261b); color: var(--ok, #3dd68c); } .ds-pill-warn { background: #2a2212; color: var(--warn, #f2b33d); } .ds-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; } .ds-est { color: var(--warn, #f2b33d); font: 600 14px 'Space Grotesk', Inter, sans-serif; } .ds-tag { display: inline-block; padding: 1px 6px; border-radius: 6px; background: #2a2212; color: var(--warn, #f2b33d); font: 600 11px Inter, system-ui, sans-serif; }"
+    },
+    {
+      "name": "Stat Tile",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "A card leading with one Space Grotesk figure and a muted caption.",
+      "html": "<div class=\"ds-tile\"><div class=\"ds-eyebrow\">Economy</div><div class=\"ds-fig\">41.8 <span class=\"ds-unit\">mpg</span></div><div class=\"ds-cap\">last 30 days, from the car</div></div>",
+      "css": ".ds-tile { display: flex; flex-direction: column; gap: 6px; padding: 20px; background: var(--card, #13161b); border: 1px solid var(--line, #1c2027); border-radius: 20px; color: var(--text, #e6e8eb); font-family: Inter, system-ui, sans-serif; width: 240px; } .ds-eyebrow { font-size: 13px; font-weight: 500; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted, #9ba3af); } .ds-fig { font: 600 26px 'Space Grotesk', Inter, sans-serif; } .ds-unit { font-size: 0.55em; font-weight: 500; color: var(--muted, #9ba3af); } .ds-cap { font-size: 12px; color: var(--muted, #9ba3af); }"
+    },
+    {
+      "name": "Navigation",
+      "kind": "nav",
+      "refersTo": "nav-link-active",
+      "description": "Side navigation links; collapses to a top bar at 820px.",
+      "html": "<nav class=\"ds-nav\"><a class=\"active\" href=\"#\">Overview</a><a href=\"#\">Trips</a><a href=\"#\">Fuel</a><a href=\"#\">Health</a></nav>",
+      "css": ".ds-nav { display: flex; flex-direction: column; gap: 4px; padding: 20px; width: 232px; background: var(--nav, #0e1014); border-right: 1px solid var(--line, #1c2027); } .ds-nav a { display: flex; align-items: center; padding: 11px 12px; min-height: 44px; border-radius: 10px; color: var(--muted, #9ba3af); font: 500 14px Inter, system-ui, sans-serif; text-decoration: none; } .ds-nav a:hover { color: var(--text, #e6e8eb); } .ds-nav a.active { background: var(--card-2, #171b22); color: var(--text, #e6e8eb); } .ds-nav a:focus-visible { outline: 2px solid var(--accent, #5aa2ff); outline-offset: 2px; }"
+    },
+    {
+      "name": "Status Dot List",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Health and alert rows: state dot, title, caption, state word.",
+      "html": "<ul class=\"ds-list\"><li><span class=\"ds-d\" style=\"background:#f2b33d\"></span><div><div class=\"ds-n\">Tyre pressure low</div><div class=\"ds-c\">Front left 31 psi, target 35</div></div><b style=\"color:#f2b33d\">Low</b></li><li><span class=\"ds-d\" style=\"background:#3dd68c\"></span><div><div class=\"ds-n\">Engine oil</div><div class=\"ds-c\">February 2027, or 4,700 mi</div></div><b style=\"color:#3dd68c\">OK</b></li></ul>",
+      "css": ".ds-list { list-style: none; margin: 0; padding: 0; width: 360px; font: 14px Inter, system-ui, sans-serif; color: var(--text, #e6e8eb); } .ds-list li { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line, #1c2027); } .ds-list li:first-child { border-top: 0; } .ds-list li > div { flex: 1; } .ds-d { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: none; } .ds-n { font-weight: 500; } .ds-c { font-size: 12px; color: var(--muted, #9ba3af); } .ds-list b { font-size: 12px; font-weight: 600; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Night Garage",
+    "overview": "A quiet workshop after dark. The car sits under one good light, the gauges glow, and\neverything else falls back into near-black. bimmerdash is a set of dark panels stacked a\nfew shades apart, with the numbers doing the talking: large Space Grotesk figures,\nsmall muted labels, and colour held back for the few things that need it: the one blue\nthat means \"this is live or interactive\", amber for fuel and anything estimated, green\nfor fine, red for wrong.\n\nIt is an Operate surface used two ways: a phone glance (fuel, cheapest station, locked,\nanything wrong) and a desktop review (trips on maps, costs over months). Density stays\nmoderate: a glance has to land in a second, so each card leads with one figure and keeps\nits explanation in a muted line beneath.\n\nThe incumbent look is soft: generous rounded cards and tonal layering. The chosen\ndirection for new work is **precise and technical**: tighter radii, hairline rules and\ninstrument-like detail, applied within the same palette. It is a direction, not yet a\nrebuild; existing cards keep their shape until a deliberate pass changes them.\n\nExplicitly not a Grafana-style panel grid (owner's requirement): no chart-per-tile walls,\nno default chart palettes, no chrome around every panel.",
+    "keyCharacteristics": [
+      "Near-black tonal layers instead of shadows",
+      "One blue accent; amber, green and red only as state",
+      "Numbers in Space Grotesk, words in Inter",
+      "Muted secondary lines carry the explanation; the figure carries the answer",
+      "Estimates are always visibly marked in amber"
+    ],
+    "rules": [
+      {
+        "name": "The One Light Rule",
+        "body": "Dash Blue is the only accent. A new feature does not get its own hue; it gets a state colour or none.",
+        "section": "colors"
+      },
+      {
+        "name": "The Honest Amber Rule",
+        "body": "Anything not measured from this car (UK average prices, assumed economy, projections) is shown in amber and labelled. A grey or white estimate is a bug.",
+        "section": "colors"
+      },
+      {
+        "name": "The Layer, Don't Light Rule",
+        "body": "Depth comes from stepping up through Garage Floor \u2192 Panel \u2192 Panel Raised \u2192 Panel Top, never from glows or shadows.",
+        "section": "colors"
+      },
+      {
+        "name": "The Figures Are Grotesk Rule",
+        "body": "Every number a user reads as a measurement (miles, mpg, \u00a3, psi, %) is set in Space Grotesk via the `num` class. Prose numbers stay in Inter.",
+        "section": "typography"
+      },
+      {
+        "name": "The No-Glow Rule",
+        "body": "No box-shadows, no blurred glows, no gradients behind content. If something needs to stand forward, it moves one step up the panel ramp.",
+        "section": "elevation"
+      },
+      {
+        "name": "The Tighter-Going-Forward Rule",
+        "body": "New components favour the lower end of the scale (6\u201312px) and 1px hairline rules over larger, softer shapes. Do not enlarge radii; when a component is reworked, it moves toward precise, not softer.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "Do lead every card with one figure in Space Grotesk and explain it in a Muted Steel caption below.",
+      "Do mark every estimate in Amber with a label (\"~\u00a3\", \"UK avg\", \"assumed\").",
+      "Do use the CSS variables in `app.css`; add a variable before reusing a new hex.",
+      "Do keep interactive targets at 40px or taller and keep the 2px Dash Blue focus ring.",
+      "Do build new components toward the tighter end of the radius scale (6\u201312px)."
+    ],
+    "donts": [
+      "Don't build Grafana-style walls of chart tiles or use a charting library's default palette.",
+      "Don't add shadows, glows or gradients to create depth.",
+      "Don't introduce a second accent hue; use a state colour or neutral.",
+      "Don't show an estimated number in white or grey.",
+      "Don't fill large areas with Alarm Red; red is for text and dots."
+    ]
+  }
+}
