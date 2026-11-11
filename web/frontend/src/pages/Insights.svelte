@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { num, monthName, longDate, ago, toUnit, distUnit, DASH, money, pounds, economy, economyUnit, perDistance } from '../lib/format.js';
@@ -114,7 +115,7 @@
 {#if error}
   <div class="card">Could not load insights: {error}</div>
 {:else if !data}
-  <div class="muted">Loading…</div>
+  <Skeleton label="Loading insights" />
 {:else}
   <section class="strip boxed" aria-label="Mileage summary">
     <div class="readout">

@@ -11,13 +11,15 @@
   import Insights from './pages/Insights.svelte';
   import Health from './pages/Health.svelte';
   import { loadSettings } from './lib/prefs.svelte.js';
+  import Skeleton from './components/Skeleton.svelte';
 
   const routes = {
-    '/': { label: 'Overview', icon: 'grid' },
-    '/trips': { label: 'Trips', icon: 'route' },
-    '/fuel': { label: 'Fuel', icon: 'fuel' },
-    '/insights': { label: 'Insights', icon: 'chart' },
-    '/health': { label: 'Health', icon: 'health' },
+    // tab: shown in the phone tab bar; the rest sit in the phone header.
+    '/': { label: 'Overview', icon: 'grid', tab: true },
+    '/trips': { label: 'Trips', icon: 'route', tab: true },
+    '/fuel': { label: 'Fuel', icon: 'fuel', tab: true },
+    '/insights': { label: 'Insights', icon: 'chart', tab: true },
+    '/health': { label: 'Health', icon: 'health', tab: true },
     '/data': { label: 'Data', icon: 'list' },
     '/settings': { label: 'Settings', icon: 'gear' },
   };
@@ -34,6 +36,8 @@
     status?.last_message_at ? (Date.now() - new Date(status.last_message_at)) / 1000 : Infinity
   );
 
+  const streamColour = $derived(streamAge < 3600 ? 'var(--ok)' : streamAge < 86400 ? 'var(--warn)' : 'var(--idle)');
+  const streamLabel = $derived(streamAge < 3600 ? 'Stream active' : status?.last_message_at ? 'Stream quiet' : 'No data yet');
   const DOT = { ok: 'var(--ok)', stale: 'var(--warn)', missing: 'var(--warn)', off: 'var(--idle)' };
   let prices = $derived(status?.prices ?? null);
   let ukLabel = $derived.by(() => {
@@ -107,42 +111,56 @@
   <Login setup={authInfo.setup_required} onDone={checkAuth} />
 {:else}
 <a class="skip-link" href="#main" onclick={(e) => { e.preventDefault(); document.getElementById('main')?.focus(); }}>Skip to content</a>
+
+{#snippet icon(name)}
+  <svg aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    {#if name === 'grid'}
+      <rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" />
+    {:else if name === 'route'}
+      <circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="5" r="2.5" /><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5" />
+    {:else if name === 'fuel'}
+      <path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13" /><path d="M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3" /><path d="M7 8h5" />
+    {:else if name === 'chart'}
+      <path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" />
+    {:else if name === 'health'}
+      <path d="M3 12h4l2-5 4 10 2-5h6" />
+    {:else if name === 'gear'}
+      <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+    {:else}
+      <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
+    {/if}
+  </svg>
+{/snippet}
+
+{#snippet logo()}
+  <span class="logo" aria-hidden="true">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 15a8 8 0 0 1 16 0" /><path d="M12 15l4-5" /></svg>
+  </span>
+{/snippet}
+
 <div class="shell">
+  <!-- Phones: a slim header; the main links move to a tab bar at the bottom. -->
+  <header class="mbar">
+    <a class="brand" href="#/">{@render logo()}bimmerdash</a>
+    <span class="mstatus" title={streamLabel}><span class="dot" style:background={streamColour}></span><span class="sr-only">{streamLabel}</span></span>
+    <a class="mlink" href="#/data" class:active={path === '/data'} aria-current={path === '/data' ? 'page' : undefined}>{@render icon('list')}<span class="sr-only">Data</span></a>
+    <a class="mlink" href="#/settings" class:active={path === '/settings'} aria-current={path === '/settings' ? 'page' : undefined}>{@render icon('gear')}<span class="sr-only">Settings</span></a>
+  </header>
+
   <nav aria-label="Main">
-    <a class="brand" href="#/">
-      <span class="logo" aria-hidden="true">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 15a8 8 0 0 1 16 0" /><path d="M12 15l4-5" /></svg>
-      </span>
-      bimmerdash
-    </a>
+    <a class="brand" href="#/">{@render logo()}bimmerdash</a>
     <div class="links">
       {#each Object.entries(routes) as [href, r]}
-        <a href={'#' + href} class:active={path === href} aria-current={path === href ? 'page' : undefined}>
-          <svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            {#if r.icon === 'grid'}
-              <rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" />
-            {:else if r.icon === 'route'}
-              <circle cx="6" cy="19" r="2.5" /><circle cx="18" cy="5" r="2.5" /><path d="M8.5 19H16a3.5 3.5 0 0 0 0-7H8a3.5 3.5 0 0 1 0-7h7.5" />
-            {:else if r.icon === 'fuel'}
-              <path d="M4 21V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v16" /><path d="M3 21h13" /><path d="M15 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3" /><path d="M7 8h5" />
-            {:else if r.icon === 'chart'}
-              <path d="M4 20V10" /><path d="M10 20V4" /><path d="M16 20v-7" /><path d="M22 20H2" />
-            {:else if r.icon === 'health'}
-              <path d="M3 12h4l2-5 4 10 2-5h6" />
-            {:else if r.icon === 'gear'}
-              <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
-            {:else}
-              <path d="M8 6h13M8 12h13M8 18h13" /><path d="M3 6h.01M3 12h.01M3 18h.01" />
-            {/if}
-          </svg>
-          {r.label}
+        <a href={'#' + href} class:active={path === href} class:wide-only={!r.tab} aria-current={path === href ? 'page' : undefined}>
+          {@render icon(r.icon)}
+          <span class="label">{r.label}</span>
         </a>
       {/each}
     </div>
     <div class="stream">
       <div class="row">
-        <span class="dot" style:background={streamAge < 3600 ? 'var(--ok)' : streamAge < 86400 ? 'var(--warn)' : 'var(--idle)'}></span>
-        {streamAge < 3600 ? 'Stream active' : status?.last_message_at ? 'Stream quiet' : 'No data yet'}
+        <span class="dot" style:background={streamColour}></span>
+        {streamLabel}
       </div>
       <div class="small muted">Last message {ago(status?.last_message_at)}</div>
       {#if status}<div class="small muted">API calls today: {status.api_calls_24h} / 50</div>{/if}
@@ -164,7 +182,7 @@
     {:else if error}
       <div class="card">Could not reach the bimmerdash API: {error}</div>
     {:else if vehicles === null}
-      <div class="muted">Loading…</div>
+      <Skeleton />
     {:else if !vehicle}
       <div class="card">
         <h2>No car yet</h2>
@@ -201,15 +219,16 @@
     gap: 28px;
   }
   .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; color: var(--text); font-family: var(--display); font-weight: 600; font-size: 19px; }
-  .logo { width: 30px; height: 30px; border-radius: 8px; color: var(--bg); background: var(--accent); display: flex; align-items: center; justify-content: center; }
+  .logo { width: 30px; height: 30px; border-radius: 8px; color: var(--bg); background: var(--accent); display: flex; align-items: center; justify-content: center; flex: none; }
   .links { display: flex; flex-direction: column; gap: 4px; }
   .links a { display: flex; align-items: center; gap: 12px; padding: 11px 12px; border-radius: 8px; color: var(--muted); font-weight: 500; min-height: 44px; }
-  .links a:hover { color: var(--text); }
+  .links a:hover { color: var(--text); background: var(--card); }
   .links a.active { background: var(--card-2); color: var(--text); }
   .stream { margin-top: auto; padding: 14px; border-radius: 8px; background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
   .row { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; }
   .row.small { font-size: 12px; font-weight: 400; color: var(--muted); }
   .sep { height: 1px; background: var(--line); margin: 4px 0; }
+  .mbar { display: none; }
   @media (min-width: 821px) {
     /* Keep the nav (and its status box) on screen while long pages scroll. */
     nav { position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; }
@@ -218,10 +237,31 @@
   main { flex: 999 1 560px; min-width: 0; padding: 32px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 24px; }
 
   @media (max-width: 820px) {
-    nav { border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; gap: 14px; }
-    .links { flex-direction: row; overflow-x: auto; }
-    .links a { flex: none; }
-    .stream { flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px 16px; padding: 10px 12px; }
-    .stream > .small.muted, .sep { display: none; }
+    /* Phone: slim header on top, the five main pages as a tab bar at the bottom. */
+    .mbar {
+      display: flex; align-items: center; gap: 4px; width: 100%;
+      position: sticky; top: 0; z-index: 20;
+      padding: 8px 8px 8px 12px; background: var(--nav); border-bottom: 1px solid var(--line);
+    }
+    .mbar .brand { padding: 0; font-size: 17px; margin-right: auto; }
+    .mbar .logo { width: 28px; height: 28px; }
+    .mstatus { display: grid; place-items: center; width: 44px; height: 44px; }
+    .mlink { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 8px; color: var(--muted); }
+    .mlink.active { color: var(--text); background: var(--card-2); }
+    nav {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+      flex: none; width: 100%; padding: 0 0 env(safe-area-inset-bottom);
+      border-right: 0; border-top: 1px solid var(--line);
+    }
+    nav > .brand, .stream, .links a.wide-only { display: none; }
+    .links { flex-direction: row; gap: 0; }
+    .links a {
+      flex: 1 1 0; flex-direction: column; gap: 3px; justify-content: center;
+      padding: 8px 2px; min-height: 58px; border-radius: 0;
+      font-size: 11px; font-weight: 600;
+    }
+    .links a.active { background: none; color: var(--accent); }
+    .links a:hover { background: none; }
+    main { padding-top: 20px; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
   }
 </style>

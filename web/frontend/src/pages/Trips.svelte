@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { num, dateTime, time, duration, economy, economyUnit, DASH, toUnit, distUnit, speedUnit } from '../lib/format.js';
@@ -56,7 +57,7 @@
 {#if error}
   <div class="card">Could not load trips: {error}</div>
 {:else if !data}
-  <div class="muted">Loading…</div>
+  <Skeleton label="Loading trips" />
 {:else}
   <section class="strip boxed" aria-label="This month">
     <div class="readout"><span class="label">Distance this month</span><span class="value">{num(toUnit(s?.month_km, prefs.distance))}<span class="unit">{unit}</span></span></div>
