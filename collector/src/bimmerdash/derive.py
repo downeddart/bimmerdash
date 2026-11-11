@@ -36,7 +36,11 @@ LATITUDE = "vehicle.cabin.infotainment.navigation.currentLocation.latitude"
 LONGITUDE = "vehicle.cabin.infotainment.navigation.currentLocation.longitude"
 FUEL_LITRES = "vehicle.drivetrain.fuelSystem.remainingFuel"
 FUEL_PERCENT = "vehicle.drivetrain.fuelSystem.level"
-KEYS = [ODOMETER, DOORS, LATITUDE, LONGITUDE, FUEL_LITRES, FUEL_PERCENT]
+_SEGMENT = "vehicle.trip.segment.accumulated.drivetrain.transmission.setting."
+ECO_PRO = _SEGMENT + "fractionDriveEcoPro"
+ECO_PRO_PLUS = _SEGMENT + "fractionDriveEcoProPlus"
+KEYS = [ODOMETER, DOORS, LATITUDE, LONGITUDE, FUEL_LITRES, FUEL_PERCENT, ECO_PRO, ECO_PRO_PLUS]
+SEGMENT_LATE = timedelta(minutes=10)  # the trip summary can arrive just after the trip
 
 PARKED = "SECURED"  # locked from outside; LOCKED alone also happens while driving
 IDLE_GAP = timedelta(minutes=45)  # no data for this long ends a session
@@ -78,6 +82,8 @@ class Trip:
     route: list[Position] = field(default_factory=list)
     fuel_start_l: float | None = None
     fuel_end_l: float | None = None
+    eco_pro_pct: float | None = None
+    eco_pro_plus_pct: float | None = None
 
     @property
     def fuel_used_l(self) -> float | None:
@@ -244,6 +250,16 @@ def detect_trips(
 
 
 # --- fill-ups ----------------------------------------------------------------------
+
+
+def attach_drive_modes(trips: list[Trip], eco: Series, eco_plus: Series) -> None:
+    """The car reports the share of each trip in ECO PRO / ECO PRO+ as it ends."""
+    for t in trips:
+        late = t.end + SEGMENT_LATE
+        for series, attr in ((eco, "eco_pro_pct"), (eco_plus, "eco_pro_plus_pct")):
+            inside = series.between(t.start, late)
+            if inside and inside[-1][1] is not None:
+                setattr(t, attr, float(inside[-1][1]))
 
 
 def tank_capacity(readings: list[FuelReading]) -> float | None:
@@ -418,6 +434,7 @@ def rebuild(db, vin: str, now: datetime | None = None) -> tuple[int, int]:
     fuel = fuel_readings(data[FUEL_LITRES], data[FUEL_PERCENT], capacity)
 
     trips = detect_trips(odometer, doors, positions, fuel, now)
+    attach_drive_modes(trips, Series(data[ECO_PRO]), Series(data[ECO_PRO_PLUS]))
     fills = detect_fillups(fuel, positions, odometer, db.nearest_forecourts)
     priced = [price_fillup(f, grade, kind, db.price_at, db.uk_average_at) for f in fills]
 
@@ -428,8 +445,8 @@ def rebuild(db, vin: str, now: datetime | None = None) -> tuple[int, int]:
             cur.executemany(
                 "INSERT INTO trips (vin, start_time, end_time, start_odometer, end_odometer,"
                 " distance_km, start_lat, start_lon, end_lat, end_lon, fuel_start_l,"
-                " fuel_end_l, fuel_used_l, route)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " fuel_end_l, fuel_used_l, route, eco_pro_pct, eco_pro_plus_pct)"
+                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 [
                     (
                         vin,
@@ -444,6 +461,8 @@ def rebuild(db, vin: str, now: datetime | None = None) -> tuple[int, int]:
                         t.fuel_end_l,
                         t.fuel_used_l,
                         Jsonb([[p.time.isoformat(), p.lat, p.lon] for p in t.route]),
+                        t.eco_pro_pct,
+                        t.eco_pro_plus_pct,
                     )
                     for t in trips
                 ],

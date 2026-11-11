@@ -1,7 +1,7 @@
 """Database tests against a real TimescaleDB. Set BIMMERDASH_TEST_DATABASE_URL to run them."""
 
 import os
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 import pytest
@@ -51,6 +51,7 @@ def db():
         "005_settings",
         "006_web_auth",
         "007_places",
+        "008_health_alerts",
     ]
     yield d
     d.close()
@@ -217,3 +218,103 @@ def test_rebuild_derives_trips_and_fillups(db):
     db.conn.commit()
     rebuild(db, VIN)
     assert q(db, "SELECT fuel_grade, price_source, cost_gbp FROM fillups") == [("E5", None, None)]
+
+
+def test_telematic_poller_creates_container_once_and_stores_values(db, tmp_path):
+    import httpx
+
+    from bimmerdash.cardata_api import CarDataApi
+    from bimmerdash.stream import RawWriter
+    from bimmerdash.telematic import CBS, TelematicPoller
+
+    calls = []
+
+    def handler(request):
+        calls.append((request.method, request.url.path))
+        if request.method == "POST":
+            return httpx.Response(201, json={"containerId": "c-1"})
+        assert request.url.params["containerId"] == "c-1"
+        return httpx.Response(
+            200,
+            json={
+                "telematicData": {
+                    CBS: {
+                        "value": '[{"type": "OIL", "title": "Engine oil", "date": "2027-01"}]',
+                        "unit": None,
+                        "timestamp": "2026-11-10T16:49:00.000Z",
+                    },
+                    "vehicle.chassis.axle.row1.wheel.left.tire.pressure": {
+                        "value": "207",
+                        "unit": "kPa",
+                        "timestamp": "2026-11-10T16:49:00.000Z",
+                    },
+                }
+            },
+        )
+
+    api = CarDataApi(httpx.Client(transport=httpx.MockTransport(handler)), lambda: "t", db)
+    db.ingest(rec("2026-11-10T16:00:00+00:00", 106000, "2026-11-10T16:00:00Z"))
+    poller = TelematicPoller(api, db, RawWriter(tmp_path), timedelta(hours=4))
+    now = datetime(2026, 11, 10, 17, 0, tzinfo=UTC)
+    assert poller.due(VIN, now)
+    assert poller.poll(VIN, now) == 2
+    assert poller.poll(VIN, now + timedelta(hours=5)) == 2
+    assert [c[0] for c in calls] == ["POST", "GET", "GET"]  # container made once
+    assert not poller.due(VIN, now + timedelta(hours=6))  # last poll was an hour before
+    assert poller.due(VIN, now + timedelta(hours=10))
+    [(value,)] = q(db, "SELECT value FROM latest_values WHERE key = %s", CBS)
+    assert value[0]["title"] == "Engine oil"
+    [(kpa,)] = q(db, "SELECT value_num FROM latest_values WHERE key LIKE '%%tire.pressure'")
+    assert kpa == 207
+    assert list(tmp_path.glob("*.jsonl"))  # raw copy kept, like stream messages
+    assert q(db, "SELECT count(*) FROM api_calls")[0][0] == 3
+
+
+def test_alerts_raise_once_then_clear(db):
+    from bimmerdash import alerts
+
+    sent = []
+
+    class FakeNotifier:
+        configured = True
+
+        def send(self, alert):
+            sent.append(alert)
+
+    t = "2026-11-10T16:00:00Z"
+    tyre = "vehicle.chassis.axle.row1.wheel.left.tire"
+
+    def push(kpa, at):
+        db.ingest(
+            {
+                "received_at": at,
+                "topic": TOPIC,
+                "payload": {
+                    "vin": VIN,
+                    "timestamp": t,
+                    "data": {
+                        tyre + ".pressure": {"value": kpa, "timestamp": at},
+                        tyre + ".pressureTarget": {"value": 234, "timestamp": at},
+                        "vehicle.cabin.door.status": {"value": "SECURED", "timestamp": at},
+                    },
+                },
+            }
+        )
+
+    push(207, "2026-11-10T16:00:00+00:00")
+    now = datetime(2026, 11, 10, 17, 0, tzinfo=UTC)
+    assert alerts.run(db, FakeNotifier(), now) == 1
+    assert alerts.run(db, FakeNotifier(), now + timedelta(minutes=1)) == 0  # not again
+    assert len(sent) == 1 and sent[0].ref == "front left"
+    push(232, "2026-11-10T18:00:00+00:00")
+    assert alerts.run(db, FakeNotifier(), now + timedelta(hours=2)) == 0
+    rows = q(db, "SELECT kind, sent_at IS NOT NULL, cleared_at IS NOT NULL FROM alerts")
+    assert rows == [("tyre", True, True)]
+    # Turned off in settings: nothing is evaluated.
+    db.conn.execute(
+        "INSERT INTO settings (scope, key, value)"
+        " VALUES ('global', 'alerts', '{\"enabled\": false}')"
+    )
+    db.conn.commit()
+    push(150, "2026-11-10T19:00:00+00:00")
+    assert alerts.run(db, FakeNotifier(), now + timedelta(hours=3)) == 0

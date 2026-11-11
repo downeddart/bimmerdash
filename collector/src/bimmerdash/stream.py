@@ -18,11 +18,13 @@ from pathlib import Path
 import httpx
 import paho.mqtt.client as mqtt
 
+from . import alerts
 from .auth import AuthError, TokenStore, refresh
 from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details
 from .config import Config
 from .db import Database
 from .derive import rebuild_all, settings_changed_at
+from .telematic import TelematicPoller
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +34,7 @@ DETAILS_MAX_AGE = timedelta(days=30)  # refresh vehicle basic data + image month
 DETAILS_RETRY = 6 * 3600  # after a failed fetch, wait before trying that VIN again
 DERIVE_AFTER_DATA = 300  # rebuild trips/fill-ups this long after new data arrives
 DERIVE_EVERY = 6 * 3600  # and at least this often (prices and averages change too)
+CHECK_EVERY = 60  # seconds between REST-poll and alert checks
 
 
 class RawWriter:
@@ -136,6 +139,23 @@ def run_stream(cfg: Config) -> int:
         if main_db is not None
         else None
     )
+    poller = (
+        TelematicPoller(api, main_db, writer, timedelta(hours=cfg.rest_poll_hours))
+        if api is not None and cfg.rest_poll_hours > 0
+        else None
+    )
+    notifier = alerts.Notifier.from_env(http)
+    if main_db is not None:
+        log.info(
+            "alerts: %s",
+            "sent with Pushover" if notifier.configured else "shown in the web UI (no Pushover)",
+        )
+        try:
+            alerts.save_channel(main_db, notifier)
+        except Exception as e:
+            log.warning("could not record the alert channel: %s", e.__class__.__name__)
+            main_db._conn = None
+    last_checks = 0.0
     failed_at: dict[str, float] = {}
     last_summary = time.monotonic()
     last_details_check = 0.0  # check soon after start
@@ -206,6 +226,23 @@ def run_stream(cfg: Config) -> int:
                     except Exception as e:
                         log.error("deriving trips/fill-ups failed: %s", e)
                         main_db._conn = None
+            if main_db is not None and now - last_checks >= CHECK_EVERY:
+                last_checks = now
+                if poller is not None and not tokens.expires_soon(margin=120):
+                    try:
+                        vins = [r[0] for r in main_db.conn.execute("SELECT vin FROM vehicles")]
+                        main_db.conn.commit()
+                        poller.run_due(vins)
+                    except Exception as e:
+                        log.error("CarData REST poll failed: %s", e.__class__.__name__)
+                        main_db._conn = None
+                try:
+                    raised = alerts.run(main_db, notifier)
+                    if raised:
+                        log.info("raised %d alert(s)", raised)
+                except Exception as e:
+                    log.error("alert check failed: %s", e)
+                    main_db._conn = None
             if now - last_summary >= SUMMARY_EVERY:
                 log.info(
                     "last %d min: %d message(s), %d data point(s) stored%s",
