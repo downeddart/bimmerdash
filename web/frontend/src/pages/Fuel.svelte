@@ -81,10 +81,7 @@
 </script>
 
 <header>
-  <div>
-    <div class="eyebrow plain">Detected from fuel level jumps</div>
-    <h1>Fuel</h1>
-  </div>
+  <h1>Fuel</h1>
   <div class="seg" role="group" aria-label="Economy units">
     <button class:on={prefs.economy === 'l100'} aria-pressed={prefs.economy === 'l100'} onclick={() => setEconomyUnit('l100')}>L/100 km</button>
     <button class:on={prefs.economy === 'mpg'} aria-pressed={prefs.economy === 'mpg'} onclick={() => setEconomyUnit('mpg')}>mpg (UK)</button>
@@ -101,61 +98,60 @@
     {@const n = advice.nearest}
     <section class="card advisor">
       <div class="adv-text">
-        <div class="eyebrow plain">Where to fill up next</div>
-        <h2 class="adv-title">{b.name}</h2>
+        <div class="card-head"><h2>Where to fill up next</h2><span class="small muted">within {num(toUnit(advice.radius_km, prefs.distance))} {distUnit(prefs.distance)}</span></div>
+        <div class="adv-title">{b.name}</div>
         <div class="muted">
           {num(b.price, 1)}p/L · {num(toUnit(b.distance_km, prefs.distance), 1)} {distUnit(prefs.distance)} from the car{b.brand && b.brand !== b.name ? ` · ${b.brand}` : ''}
         </div>
-        <div class="adv-facts">
-          <div>
-            <span class="small muted">{advice.fill_litres ? `Filling ${num(advice.fill_litres)} L` : `A ${num(advice.litres_compared)} L top-up`}</span>
-            <span class="num mid">{money(b.fill_cost)}</span>
+        <div class="strip boxed adv-facts" style="--cols: 3">
+          <div class="readout">
+            <span class="label">{advice.fill_litres ? `Filling ${num(advice.fill_litres)} L` : `A ${num(advice.litres_compared)} L top-up`}</span>
+            <span class="value">{money(b.fill_cost)}</span>
           </div>
-          <div>
-            <span class="small muted">Saving vs nearest</span>
-            <span class="num mid" class:good={b.saving > 0.05}>{b.node_id === n.node_id ? 'Nearest is best' : money(b.saving)}</span>
+          <div class="readout">
+            <span class="label">Saving vs nearest</span>
+            <span class="value" class:good={b.saving > 0.05}>{b.node_id === n.node_id ? 'Nearest' : money(b.saving)}</span>
           </div>
-          <div>
-            <span class="small muted">In the tank</span>
-            <span class="num mid">{advice.fuel.percent != null ? `${num(advice.fuel.percent)}%` : DASH}</span>
+          <div class="readout">
+            <span class="label">In the tank</span>
+            <span class="value">{advice.fuel.percent != null ? `${num(advice.fuel.percent)}%` : DASH}</span>
           </div>
         </div>
         <p class="small muted">
           {#if b.node_id !== n.node_id}Nearest is {n.name} at {num(n.price, 1)}p, {num(toUnit(n.distance_km, prefs.distance), 1)} {distUnit(prefs.distance)} away. {/if}
           Counts the fuel to drive there and back ({money(b.detour_cost)}), using {ECON_SOURCE[advice.economy.source]}.
-          Stations within {num(toUnit(advice.radius_km, prefs.distance))} {distUnit(prefs.distance)}.
         </p>
       </div>
       <div class="adv-map"><MapView markers={adviceMarkers} height={260} label="Stations near the car" /></div>
     </section>
   {/if}
 
-  <div class="grid" style="--min: 150px">
-    <div class="card tile">
-      <span class="muted">Economy</span>
-      <span class="num tile-v">{economy(econ?.l100, prefs.economy)} <span class="unit">{economyUnit(prefs.economy)}</span></span>
-      <span class="small muted">{econ?.note ?? 'after the car reports its fuel use, or your second fill-up'}</span>
+  <section class="strip boxed" aria-label="Fuel summary">
+    <div class="readout">
+      <span class="label">Economy</span>
+      <span class="value">{economy(econ?.l100, prefs.economy)}<span class="unit">{economyUnit(prefs.economy)}</span></span>
+      <span class="note">{econ?.note ?? 'after the car reports its fuel use, or your second fill-up'}</span>
     </div>
-    <div class="card tile">
-      <span class="muted">Spent this month</span>
-      <span class="num tile-v">{money(s?.month_cost ?? 0)}</span>
-      <span class="small muted">{s?.month_fillups ?? 0} fill-up{s?.month_fillups === 1 ? '' : 's'}</span>
+    <div class="readout">
+      <span class="label">Spent this month</span>
+      <span class="value">{money(s?.month_cost ?? 0)}</span>
+      <span class="note">{s?.month_fillups ?? 0} fill-up{s?.month_fillups === 1 ? '' : 's'}</span>
     </div>
-    <div class="card tile">
-      <span class="muted">Spent {s?.since ? `since ${longDate(s.since)}` : 'in total'}</span>
-      <span class="num tile-v">{money(s?.total_cost ?? 0)}</span>
+    <div class="readout">
+      <span class="label">Spent {s?.since ? `since ${longDate(s.since)}` : 'in total'}</span>
+      <span class="value">{money(s?.total_cost ?? 0)}</span>
       {#if s?.total_estimated}
-        <span class="small est">~{money(s.total_estimated)} of it estimated from UK averages</span>
+        <span class="note est">~{money(s.total_estimated)} of it estimated from UK averages</span>
       {:else}
-        <span class="small muted">{fills.length} fill-up{fills.length === 1 ? '' : 's'}</span>
+        <span class="note">{fills.length} fill-up{fills.length === 1 ? '' : 's'}</span>
       {/if}
     </div>
-    <div class="card tile">
-      <span class="muted">Fuel cost per {prefs.distance === 'mi' ? 'mile' : 'km'}</span>
-      <span class="num tile-v">{s?.pence_per_km != null ? `${num(perDistance(s.pence_per_km, prefs.distance), 1)}p` : DASH}</span>
-      <span class="small muted">{s?.avg_price_ppl ? `at ${num(s.avg_price_ppl, 1)}p/L ${s.price_basis === 'local' ? 'near home' : s.price_basis === 'uk_average' ? '(UK average)' : 'recently'}` : 'needs economy and prices'}</span>
+    <div class="readout">
+      <span class="label">Fuel cost per {prefs.distance === 'mi' ? 'mile' : 'km'}</span>
+      <span class="value">{s?.pence_per_km != null ? `${num(perDistance(s.pence_per_km, prefs.distance), 1)}p` : DASH}</span>
+      <span class="note">{s?.avg_price_ppl ? `at ${num(s.avg_price_ppl, 1)}p/L ${s.price_basis === 'local' ? 'near home' : s.price_basis === 'uk_average' ? '(UK average)' : 'recently'}` : 'needs economy and prices'}</span>
     </div>
-  </div>
+  </section>
 
   <div class="two">
     <div class="card">
@@ -165,14 +161,14 @@
           {#each months as m}
             <div class="bar-col" role="listitem">
               <span class="sr-only">{monthName(m.month)}: {money(m.cost)}{m.estimated ? `, of which ${money(m.estimated)} estimated from UK averages` : ''}</span>
-              <span class="small muted" aria-hidden="true">{money(m.cost)}</span>
-              <div class="bar" aria-hidden="true" style:height={`${Math.max(3, (m.cost / maxMonth) * 120)}px`}>
+              <span class="bar-v" aria-hidden="true">{money(m.cost)}</span>
+              <div class="bar spend" aria-hidden="true" style:height={`${Math.max(3, (m.cost / maxMonth) * 110)}px`}>
                 {#if m.estimated}<div class="bar-est" style:height={`${(m.estimated / m.cost) * 100}%`}></div>{/if}
               </div>
-              <span class="small muted" aria-hidden="true">{monthName(m.month)}</span>
             </div>
           {/each}
         </div>
+        <div class="axis" aria-hidden="true">{#each months as m}<span>{monthName(m.month)}</span>{/each}</div>
         {#if months.some((m) => m.estimated)}
           <div class="legend small muted"><span class="sw est-bg"></span>estimated from UK weekly averages</div>
         {/if}
@@ -225,7 +221,7 @@
   {/if}
 
   <div class="card">
-    <div class="card-head"><h2>Fill-ups</h2><span class="small muted">{fills.length}</span></div>
+    <div class="card-head"><h2>Fill-ups</h2><span class="small muted">{fills.length} detected from fuel level jumps</span></div>
     {#if !fills.length}
       <p class="muted">No fill-ups detected yet. After you next fill up, it appears here once the car reports its new fuel level, priced at that station's price where it can be matched.</p>
     {:else}
@@ -266,30 +262,26 @@
 {/if}
 
 <style>
-  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  .tile { display: flex; flex-direction: column; gap: 6px; padding: 20px; }
-  .tile-v { font-size: 26px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap; }
   .advisor { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
   @media (max-width: 900px) { .advisor { grid-template-columns: 1fr; } }
-  .adv-text { display: flex; flex-direction: column; gap: 8px; }
-  .adv-title { font-family: var(--display); font-size: 26px; }
-  .adv-facts { display: flex; flex-wrap: wrap; gap: 24px; margin: 10px 0 4px; }
-  .adv-facts > div { display: flex; flex-direction: column; gap: 2px; }
-  .mid { font-size: 22px; }
+  .adv-text { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .adv-text .card-head { margin-bottom: 8px; }
+  .adv-title { font-family: var(--display); font-weight: 600; font-size: 26px; }
+  .adv-facts { margin: 12px 0 4px; }
+  .adv-facts .value { font-size: 20px; }
+  .adv-facts > * { padding: 12px 14px; background: var(--card-2); }
   .good { color: var(--ok); }
   .adv-text p { margin: 4px 0 0; }
   .est { color: var(--warn); }
   .est-bg { background: var(--warn); }
   .two { display: grid; gap: 16px; align-items: start; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); }
-  .card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-  .bars { display: flex; align-items: flex-end; gap: 10px; height: 180px; }
-  .bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 8px; height: 100%; min-width: 0; }
-  .bar { width: 100%; max-width: 40px; border-radius: 6px 6px 3px 3px; background: var(--accent); display: flex; flex-direction: column-reverse; overflow: hidden; }
+  .bar.spend { background: var(--accent); display: flex; flex-direction: column-reverse; overflow: hidden; }
   .bar-est { width: 100%; background: var(--warn); }
   .legend, .legend-inline { display: flex; gap: 14px; align-items: center; margin-top: 12px; }
   .legend-inline { margin: 0; }
   .legend-inline > span { display: inline-flex; gap: 6px; align-items: center; }
-  .sw { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .sw { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
   .stations { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
   .stations li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--line); }
   .stations li:first-child { border-top: 0; }
@@ -301,5 +293,5 @@
   th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 0 10px 10px; }
   td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top; }
   .r { text-align: right; }
-  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 5px; }
+  code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 4px; }
 </style>

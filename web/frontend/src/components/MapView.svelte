@@ -74,7 +74,7 @@
 <div class="map" bind:this={el} style:height={`${height}px`} role="region" aria-label={label}></div>
 
 <style>
-  .map { width: 100%; border-radius: 14px; overflow: hidden; background: var(--card-3); border: 1px solid var(--line); }
+  .map { width: 100%; border-radius: 8px; overflow: hidden; background: var(--card-3); border: 1px solid var(--line); }
   /* Dark-mode the standard tiles rather than depend on a third-party dark style. */
   .map :global(.leaflet-tile-pane) { filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9) saturate(0.6); }
   .map :global(.leaflet-control-attribution) { background: rgba(11, 13, 16, 0.8); color: var(--muted); font-size: 11px; padding: 2px 8px; border-top-left-radius: 8px; }

@@ -16,9 +16,8 @@
 </script>
 
 <header>
-  <div class="eyebrow">Raw CarData values</div>
   <h1>Data</h1>
-  <p class="muted">The latest value of every data point your car has sent: {rows.length} so far.</p>
+  <p class="muted">The latest raw CarData value of every data point your car has sent: {rows.length} so far.</p>
 </header>
 
 <div class="card table-card">
@@ -48,11 +47,11 @@
   header { display: flex; flex-direction: column; gap: 6px; }
   header p { margin: 4px 0 0; }
   .table-card { padding: 0; overflow: hidden; }
-  .search { display: flex; flex-direction: column; gap: 6px; padding: 20px 24px; border-bottom: 1px solid var(--line); }
+  .search { display: flex; flex-direction: column; gap: 6px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
   input { max-width: 360px; min-height: 44px; }
   .scroll { overflow-x: auto; }
   table { width: 100%; min-width: 640px; border-collapse: collapse; }
-  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 10px 24px; }
-  td { padding: 12px 24px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 10px 20px; }
+  td { padding: 10px 20px; border-top: 1px solid var(--line); vertical-align: top; }
   .key { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
 </style>

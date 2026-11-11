@@ -110,7 +110,7 @@
         <span class="label">Fuel</span>
         <span class="value" style:color="var(--fuel)">{o.fuel_percent != null ? `${num(o.fuel_percent)}%` : DASH}{#if o.fuel_litres}<span class="unit">{num(o.fuel_litres.value, 1)} L</span>{/if}</span>
         <div class="gauge" role="img" aria-label={o.fuel_percent != null ? `Fuel ${num(o.fuel_percent)} percent` : 'Fuel level not reported yet'}>
-          <div class="gauge-fill" style:width={`${o.fuel_percent ?? 0}%`}></div>
+          <div class="fill" style:width={`${o.fuel_percent ?? 0}%`} style:background="var(--fuel)"></div>
           <span class="tick" style:left="25%"></span><span class="tick" style:left="50%"></span><span class="tick" style:left="75%"></span>
         </div>
       </div>
@@ -181,13 +181,13 @@
             {#each weeks as w, i}
               <div class="bar-col" role="listitem">
                 <span class="sr-only">Week of {shortDate(w.week_start)}: {dist(w.km, prefs.distance)} {distUnit(prefs.distance)}</span>
-                <span class="bar-v small" aria-hidden="true">{dist(w.km, prefs.distance)}</span>
-                <div class="bar" class:now={i === weeks.length - 1} aria-hidden="true" style:height={`${Math.max(2, (w.km / maxKm) * 100)}%`}></div>
+                <span class="bar-v" aria-hidden="true">{dist(w.km, prefs.distance)}</span>
+                <div class="bar" class:now={i === weeks.length - 1} aria-hidden="true" style:height={`${Math.max(2, (w.km / maxKm) * 110)}px`}></div>
               </div>
             {/each}
           </div>
           <div class="axis" class:sparse={weeks.length > 6} aria-hidden="true">
-            {#each weeks as w}<span class="small muted">{shortDate(w.week_start)}</span>{/each}
+            {#each weeks as w}<span>{shortDate(w.week_start)}</span>{/each}
           </div>
         </div>
       </div>
@@ -216,12 +216,8 @@
   .strip .unit { margin-left: 4px; }
   .plate-name { font-family: var(--display); font-weight: 600; font-size: 17px; }
 
-  .strip { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; }
-  .strip > .readout { padding: 16px 20px; border-left: 1px solid var(--line); }
-  .strip > .readout:first-child { border-left: 0; }
-  .gauge { position: relative; height: 6px; margin-top: 6px; border-radius: 2px; background: var(--bar); overflow: hidden; }
-  .gauge-fill { position: absolute; inset: 0 auto 0 0; background: var(--fuel); }
-  .tick { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--card); }
+  .bay .strip { border-top: 0; }
+  .fuel .gauge { margin-top: 6px; }
 
   .pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: stretch; }
   .location { display: flex; flex-direction: column; }
@@ -235,19 +231,9 @@
 
   .weekly-body { display: grid; grid-template-columns: 180px 1fr; gap: 24px; align-items: end; }
   .weekly-facts { display: flex; flex-direction: column; gap: 16px; padding-right: 24px; border-right: 1px solid var(--line); }
-  .chart { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-  .bars { display: flex; align-items: flex-end; gap: 12px; height: 150px; border-bottom: 1px solid var(--line-2); }
-  .bar-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 6px; height: 100%; min-width: 0; }
-  .bar { width: 100%; max-width: 40px; border-radius: 2px 2px 0 0; background: var(--bar); }
-  .bar.now { background: var(--accent); }
-  .bar-v { font-family: var(--display); font-weight: 500; font-variant-numeric: tabular-nums; color: var(--muted); }
-  .axis { display: flex; gap: 12px; }
-  .axis > span { flex: 1 1 0; text-align: center; min-width: 0; white-space: nowrap; }
+  .chart { min-width: 0; }
 
   @media (max-width: 760px) {
-    .strip { grid-template-columns: 1fr 1fr; }
-    .strip > .readout:nth-child(3) { border-left: 0; }
-    .strip > .readout:nth-child(n + 3) { border-top: 1px solid var(--line); }
     .weekly-body { grid-template-columns: 1fr; }
     .weekly-facts { flex-direction: row; justify-content: space-between; padding: 0 0 16px; border-right: 0; border-bottom: 1px solid var(--line); }
     .axis.sparse > span:nth-child(odd) { visibility: hidden; }

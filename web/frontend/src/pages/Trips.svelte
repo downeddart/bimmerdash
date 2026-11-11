@@ -49,10 +49,8 @@
 </script>
 
 <header>
-  <div>
-    <div class="eyebrow">{monthLabel}</div>
-    <h1>Trips</h1>
-  </div>
+  <h1>Trips</h1>
+  <span class="small muted">{monthLabel}</span>
 </header>
 
 {#if error}
@@ -60,16 +58,16 @@
 {:else if !data}
   <div class="muted">Loading…</div>
 {:else}
-  <div class="grid" style="--min: 150px">
-    <div class="card tile"><span class="muted">This month</span><span class="num tile-v">{num(toUnit(s?.month_km, prefs.distance))} <span class="unit">{unit}</span></span></div>
-    <div class="card tile"><span class="muted">Trips</span><span class="num tile-v">{num(s?.month_trips)}</span></div>
-    <div class="card tile"><span class="muted">Time driving</span><span class="num tile-v">{duration(s?.month_minutes)}</span><span class="small muted">door open to locked</span></div>
-    <div class="card tile">
-      <span class="muted">Economy</span>
-      <span class="num tile-v">{economy(s?.economy_l100, prefs.economy)} <span class="unit">{economyUnit(prefs.economy)}</span></span>
-      <span class="small muted">{s?.economy_l100 ? `last 90 days, ${s.economy_trips} trips` : 'needs a few trips with fuel readings'}</span>
+  <section class="strip boxed" aria-label="This month">
+    <div class="readout"><span class="label">Distance this month</span><span class="value">{num(toUnit(s?.month_km, prefs.distance))}<span class="unit">{unit}</span></span></div>
+    <div class="readout"><span class="label">Trips</span><span class="value">{num(s?.month_trips)}</span></div>
+    <div class="readout"><span class="label">Time driving</span><span class="value">{duration(s?.month_minutes)}</span><span class="note">door open to locked</span></div>
+    <div class="readout">
+      <span class="label">Economy</span>
+      <span class="value">{economy(s?.economy_l100, prefs.economy)}<span class="unit">{economyUnit(prefs.economy)}</span></span>
+      <span class="note">{s?.economy_l100 ? `last 90 days, ${s.economy_trips} trips` : 'needs a few trips with fuel readings'}</span>
     </div>
-  </div>
+  </section>
 
   {#if trips.length === 0}
     <div class="card empty">
@@ -102,18 +100,16 @@
           {:else}
             <div class="nomap muted small">No position was reported for this trip.</div>
           {/if}
-          <div class="stats">
-            <div><span class="muted small">Distance</span><span class="num">{km(trip.distance_km)} {unit}</span></div>
-            <div><span class="muted small">Duration</span><span class="num">{duration(trip.minutes)}</span></div>
-            <div><span class="muted small">Avg speed</span><span class="num">{speed ? `${num(toUnit(speed, prefs.distance))} ${speedUnit(prefs.distance)}` : DASH}</span></div>
-            <div><span class="muted small">Fuel used</span><span class="num">{trip.fuel_used_l != null ? `${num(trip.fuel_used_l)} L` : DASH}</span></div>
-            {#if trip.eco_pro_pct != null}
-              <div title="Share of the trip driven in ECO PRO (and ECO PRO+) mode">
-                <span class="muted small">ECO PRO</span>
-                <span class="num">{num(trip.eco_pro_pct + (trip.eco_pro_plus_pct ?? 0))}%</span>
-              </div>
-            {/if}
-            <div><span class="muted small">Odometer</span><span class="num">{trip.end_odometer != null ? `${num(toUnit(trip.end_odometer, prefs.distance))} ${unit}` : DASH}</span></div>
+          <div class="strip boxed stats" style="--cols: 3">
+            <div class="readout"><span class="label">Distance</span><span class="value">{km(trip.distance_km)}<span class="unit">{unit}</span></span></div>
+            <div class="readout"><span class="label">Duration</span><span class="value">{duration(trip.minutes)}</span></div>
+            <div class="readout"><span class="label">Average speed</span><span class="value">{speed ? num(toUnit(speed, prefs.distance)) : DASH}{#if speed}<span class="unit">{speedUnit(prefs.distance)}</span>{/if}</span></div>
+            <div class="readout"><span class="label">Fuel used</span><span class="value">{trip.fuel_used_l != null ? num(trip.fuel_used_l) : DASH}{#if trip.fuel_used_l != null}<span class="unit">L</span>{/if}</span></div>
+            <div class="readout" title="Share of the trip driven in ECO PRO (and ECO PRO+) mode">
+              <span class="label">ECO PRO</span>
+              <span class="value">{trip.eco_pro_pct != null ? `${num(trip.eco_pro_pct + (trip.eco_pro_plus_pct ?? 0))}%` : DASH}</span>
+            </div>
+            <div class="readout"><span class="label">Odometer</span><span class="value">{trip.end_odometer != null ? num(toUnit(trip.end_odometer, prefs.distance)) : DASH}{#if trip.end_odometer != null}<span class="unit">{unit}</span>{/if}</span></div>
           </div>
           {#if trip.fuel_used_l != null && trip.distance_km < 50}
             <div class="small muted">Fuel is reported in whole litres, so short trips are rough.</div>
@@ -125,25 +121,22 @@
 {/if}
 
 <style>
-  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  .tile { display: flex; flex-direction: column; gap: 6px; padding: 20px; }
-  .tile-v { font-size: 26px; }
+  header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap; }
   .empty h2 { margin-bottom: 6px; }
   .split { display: grid; gap: 16px; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); align-items: start; }
   @media (max-width: 960px) { .split { grid-template-columns: 1fr; } }
-  .list { list-style: none; margin: 0; padding: 8px; display: flex; flex-direction: column; gap: 2px; max-height: 640px; overflow-y: auto; }
-  .row { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 14px; border-radius: 12px; min-height: 44px; }
+  .list { list-style: none; margin: 0; padding: 4px 0; max-height: 640px; overflow-y: auto; }
+  .list li + li { border-top: 1px solid var(--line); }
+  .row { all: unset; box-sizing: border-box; width: 100%; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; padding: 12px 20px; min-height: 44px; }
   .row:hover { background: var(--card-2); }
   .row.active { background: var(--card-3); }
-  .row:focus-visible { outline: 2px solid var(--accent); }
+  .row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .when { font-weight: 500; display: flex; flex-direction: column; gap: 2px; }
   .route { font-weight: 400; }
   .km { text-align: right; }
   .detail { display: flex; flex-direction: column; gap: 16px; }
-  .card-head { display: flex; justify-content: space-between; gap: 12px; }
+  .detail .card-head { margin-bottom: 0; }
   .note { margin-top: -8px; }
-  .nomap { padding: 28px; text-align: center; border: 1px dashed var(--line-2); border-radius: 14px; }
-  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; }
-  .stats > div { display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--card-2); }
-  .stats .num { font-size: 18px; }
+  .nomap { padding: 28px; text-align: center; border: 1px dashed var(--line-2); border-radius: 8px; }
+  .stats .value { font-size: 18px; }
 </style>
