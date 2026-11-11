@@ -81,6 +81,28 @@ class Database:
     def migrate(self) -> list[str]:
         return migrate(self.conn)
 
+    def recompress_images(self, normalise) -> int:
+        """Re-encode stored car images not yet in the current format (one-off after an
+        upgrade; BMW's render is only re-fetched monthly). Returns how many changed."""
+        rows = self.conn.execute(
+            "SELECT vin, image FROM vehicles"
+            " WHERE image IS NOT NULL AND image_type IS DISTINCT FROM 'image/webp'"
+        ).fetchall()
+        done = 0
+        for vin, data in rows:
+            try:
+                image, ctype = normalise(bytes(data))
+            except OSError as e:
+                log.warning("stored image for %s… unreadable: %s", vin[:5], e)
+                continue
+            self.conn.execute(
+                "UPDATE vehicles SET image = %s, image_type = %s WHERE vin = %s",
+                (image, ctype, vin),
+            )
+            done += 1
+        self.conn.commit()
+        return done
+
     def ingest(self, record: dict, commit: bool = True) -> int:
         """Store one raw record and its data points. Idempotent. Returns points stored."""
         try:

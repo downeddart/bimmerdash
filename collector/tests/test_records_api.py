@@ -71,8 +71,19 @@ def _png(size=(100, 60), box=(20, 10, 70, 50)):
 
 def test_normalise_image_crops_transparent_margin():
     data, ctype = normalise_image(_png())
-    assert ctype == "image/png"
-    assert Image.open(io.BytesIO(data)).size == (50, 40)
+    assert ctype == "image/webp"
+    img = Image.open(io.BytesIO(data))
+    assert img.format == "WEBP" and img.size == (50, 40)
+
+
+def test_normalise_image_keeps_transparency():
+    # A render with see-through windows: transparency inside the crop must survive.
+    src = Image.open(io.BytesIO(_png()))
+    src.paste((0, 0, 0, 0), (30, 20, 40, 30))
+    buf = io.BytesIO()
+    src.save(buf, format="PNG")
+    img = Image.open(io.BytesIO(normalise_image(buf.getvalue())[0]))
+    assert img.mode == "RGBA" and img.getpixel((15, 15))[3] == 0
 
 
 class FakeDb:
@@ -110,7 +121,7 @@ def test_api_image_mislabelled_png():
         lambda r: httpx.Response(200, content=_png(), headers={"content-type": "image/jpeg"}), db
     )
     data, ctype = api.image(VIN)
-    assert ctype == "image/png" and data[:8] == b"\x89PNG\r\n\x1a\n"
+    assert ctype == "image/webp" and data[:4] == b"RIFF" and data[8:12] == b"WEBP"
 
 
 def test_api_quota_blocks_without_calling():

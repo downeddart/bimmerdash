@@ -580,3 +580,11 @@ def test_built_assets_are_compressed_and_cached(tmp_path, monkeypatch):
         assert "immutable" in js.headers["cache-control"]
         page = c.get("/fuel", headers={"Accept-Encoding": "gzip"})
         assert page.headers["cache-control"] == "no-cache"
+
+
+def test_car_image_revalidates_with_etag(client):
+    first = client.get(f"/api/vehicles/{VIN}/image")
+    assert first.status_code == 200 and first.content == b"img"
+    etag = first.headers["etag"]
+    again = client.get(f"/api/vehicles/{VIN}/image", headers={"If-None-Match": etag})
+    assert again.status_code == 304 and again.content == b""

@@ -117,8 +117,12 @@ def _check_vin(vin: str) -> None:
         raise ValueError("invalid VIN format")
 
 
+WEBP_QUALITY = 90  # a 1000x600 render: ~40 KB, against ~185 KB as PNG
+
+
 def normalise_image(data: bytes) -> tuple[bytes, str]:
-    """BMW labels renders image/jpeg but sends RGBA PNG: sniff, crop transparent margins."""
+    """BMW labels renders image/jpeg but sends RGBA PNG: sniff, crop transparent margins,
+    store as WebP (with transparency) for a smaller page."""
     img = Image.open(io.BytesIO(data))
     img.load()
     if img.mode in ("RGBA", "LA") or "transparency" in img.info:
@@ -127,8 +131,8 @@ def normalise_image(data: bytes) -> tuple[bytes, str]:
         if box:
             img = img.crop(box)
     out = io.BytesIO()
-    img.save(out, format="PNG", optimize=True)
-    return out.getvalue(), "image/png"
+    img.save(out, format="WEBP", quality=WEBP_QUALITY, method=6)
+    return out.getvalue(), "image/webp"
 
 
 def fetch_vehicle_details(api: CarDataApi, db: Database, vin: str) -> None:

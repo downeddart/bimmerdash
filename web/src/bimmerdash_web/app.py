@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from contextlib import asynccontextmanager
@@ -166,13 +167,19 @@ def create_app(database_url: str | None = None) -> FastAPI:
             return queries.vehicles(conn)
 
     @app.get("/api/vehicles/{vin}/image")
-    def image(vin: str):
+    def image(vin: str, request: Request):
         with pool.connection() as conn:
             found = queries.vehicle_image(conn, vin_or_404(vin))
         if found is None:
             raise HTTPException(404, "no image")
         data, ctype = found
-        return Response(data, media_type=ctype, headers={"Cache-Control": "max-age=86400"})
+        # Fresh for a day, then revalidated by ETag: a 304 costs nothing, and a new
+        # render (monthly at most) still shows up the next day.
+        etag = '"' + hashlib.sha256(data).hexdigest()[:20] + '"'
+        headers = {"Cache-Control": "max-age=86400, stale-while-revalidate=604800", "ETag": etag}
+        if request.headers.get("if-none-match") == etag:
+            return Response(status_code=304, headers=headers)
+        return Response(data, media_type=ctype, headers=headers)
 
     @app.get("/api/vehicles/{vin}/overview")
     def overview(vin: str):
