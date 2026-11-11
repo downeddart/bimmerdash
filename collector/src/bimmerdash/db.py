@@ -15,8 +15,28 @@ from .records import data_points, parse_time, payload_hash, vin_of
 log = logging.getLogger(__name__)
 
 
+# Any fixed number, the same in every process that migrates this database.
+MIGRATION_LOCK = 0x626D7764  # "bmwd"
+
+
 def migrate(conn: psycopg.Connection) -> list[str]:
-    """Apply pending migrations from the package, in filename order. Returns those applied."""
+    """Apply pending migrations from the package, in filename order. Returns those applied.
+
+    Several services start from the same image at once (collector, prices), so migrations
+    run under an advisory lock: the first to get it applies them, the rest wait, then find
+    nothing left to do.
+    """
+    conn.execute("SELECT pg_advisory_lock(%s)", (MIGRATION_LOCK,))
+    conn.commit()
+    try:
+        return _migrate(conn)
+    finally:
+        conn.rollback()  # a failed migration leaves the transaction aborted
+        conn.execute("SELECT pg_advisory_unlock(%s)", (MIGRATION_LOCK,))
+        conn.commit()
+
+
+def _migrate(conn: psycopg.Connection) -> list[str]:
     conn.execute(
         "CREATE TABLE IF NOT EXISTS schema_migrations ("
         " version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
