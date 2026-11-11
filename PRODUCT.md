@@ -71,6 +71,12 @@ live UK station prices (Fuel Finder) rather than a fixed figure.
 - Name: bimmerdash. Not affiliated with or endorsed by BMW AG; BMW marks are not used
   as branding.
 - Dark UI in the manner of RiviAmigo; explicitly not the look of a Grafana dashboard.
+- Visual direction is the category standard for a car logger, executed at full craft
+  (owner's choice, 2026-11-11, after two rounds of alternative visual worlds). The bar
+  is RiviAmigo for the category, the Tesla and Rivian owner apps for the phone glance
+  (car first, one status, what needs attention), and Linear for dense desktop screens.
+  Familiar beats novel; polish, not reinvention.
+- Must not imitate BMW's own apps or branding.
 
 ## Evidence on Hand
 
