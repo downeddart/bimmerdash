@@ -25,6 +25,17 @@ def _rows(cur) -> list[dict]:
 # --- trips -------------------------------------------------------------------------
 
 
+def _eco_cols(conn: psycopg.Connection) -> str:
+    """ECO PRO share columns arrived in migration 008; older databases lack them."""
+    has = conn.execute(
+        "SELECT 1 FROM information_schema.columns"
+        " WHERE table_name = 'trips' AND column_name = 'eco_pro_pct'"
+    ).fetchone()
+    return (
+        "eco_pro_pct, eco_pro_plus_pct" if has else "NULL AS eco_pro_pct, NULL AS eco_pro_plus_pct"
+    )
+
+
 def trips(conn: psycopg.Connection, vin: str, limit: int = 200) -> dict:
     if not _ready(conn):
         return {"summary": None, "trips": []}
@@ -32,7 +43,8 @@ def trips(conn: psycopg.Connection, vin: str, limit: int = 200) -> dict:
         conn.execute(
             "SELECT start_time, end_time, distance_km, start_odometer, end_odometer,"
             " start_lat, start_lon, end_lat, end_lon, fuel_start_l, fuel_end_l, fuel_used_l,"
-            " route FROM trips WHERE vin = %s ORDER BY start_time DESC LIMIT %s",
+            f" route, {_eco_cols(conn)} FROM trips"
+            " WHERE vin = %s ORDER BY start_time DESC LIMIT %s",
             (vin, limit),
         )
     )
@@ -155,11 +167,24 @@ def fuel(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dic
         "avg_price_ppl": round(avg_ppl, 1) if avg_ppl else None,
         "uncosted_fillups": len(fills) - len(costed),
     }
+    from . import economy
+    from .usage import local_price
+
+    if summary["pence_per_km"] is None:
+        # No priced fill-ups yet: the car's own economy at today's local price.
+        best = economy.best(conn, vin, summary["economy_l100"])
+        price = local_price(conn, vin)
+        if best and price:
+            summary["pence_per_km"] = round(best["l100"] / 100 * price["ppl"], 1)
+            summary["avg_price_ppl"] = price["ppl"]
+            summary["price_basis"] = price["source"]
     return {
         "grade": grade,
         "summary": summary,
         "fillups": list(reversed(fills)),
         "monthly": monthly(costed),
+        # The car's own fuel counters: the most precise economy figure available.
+        "car_economy": economy.car_economy(conn, vin, now),
     }
 
 
@@ -211,10 +236,23 @@ def nearby_prices(conn: psycopg.Connection, vin: str, radius_km: float = 5, limi
     grade = _grade(conn, vin)
     if centre is None:
         return {"centre": None, "grade": grade, "stations": []}
-    lat, lon = centre["lat"], centre["lon"]
+    rows = stations_near(conn, centre["lat"], centre["lon"], grade, radius_km, limit)
+    return {"centre": centre, "grade": grade, "radius_km": radius_km, "stations": rows}
+
+
+def stations_near(
+    conn: psycopg.Connection,
+    lat: float,
+    lon: float,
+    grade: str,
+    radius_km: float,
+    limit: int = 8,
+    order: str = "price",
+) -> list[dict]:
+    """Open forecourts within radius_km with a recent, plausible price for this grade."""
     rows = _rows(
         conn.execute(
-            """
+            f"""
             WITH near AS (
                 SELECT node_id, trading_name, brand_name, postcode, latitude, longitude,
                        6371 * sqrt(power(radians(latitude - %(lat)s), 2)
@@ -235,7 +273,7 @@ def nearby_prices(conn: psycopg.Connection, vin: str, radius_km: float = 5, limi
             ) p
             WHERE n.km <= %(radius)s AND p.price BETWEEN %(pmin)s AND %(pmax)s
               AND p.effective_at > now() - make_interval(days => %(max_age)s)
-            ORDER BY p.price, n.km LIMIT %(limit)s
+            ORDER BY {"n.km" if order == "distance" else "p.price, n.km"} LIMIT %(limit)s
             """,
             {
                 "lat": lat,
@@ -254,7 +292,7 @@ def nearby_prices(conn: psycopg.Connection, vin: str, radius_km: float = 5, limi
     for r in rows:
         r["distance_km"] = float(r["distance_km"])
         r["name"] = tidy_name(r["name"])
-    return {"centre": centre, "grade": grade, "radius_km": radius_km, "stations": rows}
+    return rows
 
 
 # --- helpers -----------------------------------------------------------------------
