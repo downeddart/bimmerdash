@@ -82,6 +82,14 @@ h2 { font-size: 16px; font-weight: 600; }
 }
 .pill.ok { background: var(--ok-bg); color: var(--ok); }
 .pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.bad { background: var(--bad-bg); color: var(--bad-text); }
+a.pill { text-decoration: none; }
+
+/* State changes ease quickly; nothing else moves. */
+@media (prefers-reduced-motion: no-preference) {
+  a, button, .btn, input, select, .seg button, .pill { transition: color 120ms ease-out, background-color 120ms ease-out, border-color 120ms ease-out, filter 120ms ease-out; }
+}
+.btn:active, .seg button:active { filter: brightness(0.9); }
 
 .tag { display: inline-block; padding: 1px 6px; border-radius: 6px; background: var(--card-3); color: var(--muted); font-size: 11px; font-weight: 600; }
 .tag.est { background: var(--warn-bg); color: var(--warn); }

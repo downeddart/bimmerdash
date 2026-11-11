@@ -333,7 +333,10 @@ The unit switcher (miles or kilometres, mpg or L/100 km), on Fuel and Settings.
 - **Links:** Muted Steel, weight 500, 44px tall with a 12px icon gap; hover to Headlight
   White; active link on Panel Raised.
 - **Status box:** stream connection status pinned to the bottom of the nav.
-- **Mobile:** collapses to a top bar with horizontally scrolling links.
+- **Phone (820px and below):** a slim sticky header (brand, stream-status dot, Data and
+  Settings icon links) and a bottom tab bar with the five main pages (Overview, Trips,
+  Fuel, Insights, Health), icon over an 11px label, the current tab in Dash Blue, clear of
+  the safe-area inset. Content starts directly under the header.
 
 ### Instrument strip (signature)
 A row of readouts (label, figure, optional note) divided by 1px hairlines, in one boxed
@@ -350,6 +353,17 @@ range, odometer, this week) directly beneath.
 A 6–10px linear bar with 2px corners on Bar Track, quarter ticks cut in Panel. Fuel fills
 in Fuel Amber; the mileage limit shows used in Dash Blue over the projection.
 
+### Attention chips (signature)
+Under Overview's status headline, one row of chips says what needs the owner, most urgent
+first, each linking to where it is dealt with: Alarm for warning lights and overdue
+service, Amber for low tyres, low fuel or the car left unlocked, neutral for service due
+soon (items due the same month share a chip). With nothing to do it reads "Nothing needs
+attention" in OK Green. The phone glance in the manner of the car makers' owner apps.
+
+### Loading
+Pages load into a skeleton of their own shape (title bar, a strip, two panels) in Panel,
+breathing gently to Panel Raised unless reduced motion is set; never a bare "Loading…".
+
 ### Bar chart
 Squared bars (2px top corners) on a Rule Strong baseline, values above in 12px Space
 Grotesk, labels on an axis below. The current period is Dash Blue, the rest Bar Track.
@@ -362,6 +376,11 @@ a third-party dark style, with Dash Blue routes and controls restyled onto Panel
 Health and alert lists lead each row with an 8px state dot (green, amber, red, or Idle
 Grey for cleared), a weight-500 title, a Muted Steel caption, and the state word in its
 colour at the right.
+
+### State motion
+
+State changes (hover, selection, pressed) ease over 120ms; nothing else moves, and under
+reduced motion nothing moves at all. Pressed buttons and segments darken slightly.
 
 ## Do's and Don'ts
 

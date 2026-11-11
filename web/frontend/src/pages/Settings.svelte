@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { num } from '../lib/format.js';
@@ -132,7 +133,7 @@
 {/if}
 
 {#if !all}
-  <div class="muted">Loading…</div>
+  <Skeleton label="Loading settings" />
 {:else}
   <section class="card">
     <div class="head">

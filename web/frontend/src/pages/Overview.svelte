@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { ago, num, title, shortDate, DASH, dist, distUnit } from '../lib/format.js';
@@ -18,6 +19,32 @@
     if (health.issues) return `${health.issues} to check`;
     if (health.due_soon) return 'Service due soon';
     return 'All good';
+  });
+  // Everything that wants the owner's attention, most urgent first, each linking to where it's dealt with.
+  const attention = $derived.by(() => {
+    if (!o) return [];
+    const out = [];
+    const warnings = health?.warnings?.items?.length ?? 0;
+    if (warnings) out.push({ text: `${warnings} warning light${warnings === 1 ? '' : 's'}`, tone: 'bad', href: '#/health' });
+    for (const s of health?.services ?? []) {
+      if (s.state === 'overdue') out.push({ text: `${s.name} overdue`, tone: 'bad', href: '#/health' });
+    }
+    const lowTyres = Object.values(health?.tyres?.wheels ?? {}).filter((w) => w.state === 'low' || w.state === 'very_low').length;
+    if (lowTyres) out.push({ text: `${lowTyres} tyre${lowTyres === 1 ? '' : 's'} low`, tone: 'warn', href: '#/health' });
+    if (o.fuel_percent != null && o.fuel_percent <= 25) out.push({ text: `Fuel ${num(o.fuel_percent)}% · find the cheapest`, tone: 'warn', href: '#/fuel' });
+    if (o.doors && !locked && !o.is_moving) out.push({ text: 'Not locked', tone: 'warn', href: '#/' });
+    // Items due soon in the same month share one chip ("Engine oil and vehicle check due Jan 2027").
+    const soon = new Map();
+    for (const s of health?.services ?? []) {
+      if (s.state !== 'soon') continue;
+      const month = s.due ? new Date(s.due).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' }) : 'soon';
+      soon.set(month, [...(soon.get(month) ?? []), s.name]);
+    }
+    for (const [month, names] of soon) {
+      const list = names.map((n, i) => (i ? n.toLowerCase() : n)).join(' and ');
+      out.push({ text: `${list} due ${month}`, tone: '', href: '#/health' });
+    }
+    return out;
   });
   const here = $derived(o?.location ? placeAt(places, o.location) : null);
 
@@ -87,11 +114,19 @@
 
 {#if o}
   <header>
-    <h1>{headline}</h1>
-    <div class="head-meta">
-      {#if locked}<span class="pill ok"><span class="dot" style:background="var(--ok)" aria-hidden="true"></span>All doors secured</span>{/if}
+    <div class="head-title">
+      <h1>{headline}</h1>
       <span class="small muted">updated {ago(o.updated_at)}</span>
     </div>
+    <!-- The phone-glance line: what needs doing, or that nothing does. -->
+    <ul class="attention" aria-label="Needs attention">
+      {#each attention as a}
+        <li><a class="pill {a.tone}" href={a.href}><span class="dot" style:background="currentColor" aria-hidden="true"></span>{a.text}</a></li>
+      {:else}
+        {#if health}<li><span class="pill ok"><span class="dot" style:background="currentColor" aria-hidden="true"></span>Nothing needs attention</span></li>{/if}
+      {/each}
+      {#if locked}<li><span class="pill ok"><span class="dot" style:background="currentColor" aria-hidden="true"></span>All doors secured</span></li>{/if}
+    </ul>
   </header>
 
   <section class="bay" aria-label="Your car">
@@ -196,12 +231,15 @@
     {/if}
   </section>
 {:else}
-  <div class="muted">Loading…</div>
+  <Skeleton label="Loading the car" />
 {/if}
 
 <style>
-  header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 16px; }
-  .head-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header { display: flex; flex-direction: column; gap: 12px; }
+  .head-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; }
+  .attention { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; }
+  .attention a.pill { min-height: 32px; }
+  .attention a.pill:hover { filter: brightness(1.2); }
 
   /* The garage bay: the car under one light, with its instrument strip beneath. */
   .bay { border: 1px solid var(--line-2); border-radius: 12px; overflow: hidden; background: var(--card); }

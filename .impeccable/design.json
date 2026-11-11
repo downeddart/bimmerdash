@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-11-11T15:02:08+00:00",
+  "generatedAt": "2026-11-11T16:16:42+00:00",
   "title": "Design System: bimmerdash",
   "extensions": {
     "colorMeta": {
@@ -406,9 +406,9 @@
     "shadows": [],
     "motion": [
       {
-        "name": "instant",
-        "value": "none",
-        "purpose": "No transitions: state changes (hover, selected) apply instantly."
+        "name": "state",
+        "value": "120ms ease-out",
+        "purpose": "Colour, background and border changes on hover, selection and press; nothing else moves; none under reduced motion."
       }
     ],
     "breakpoints": [

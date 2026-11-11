@@ -1,4 +1,5 @@
 <script>
+  import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
   import { num, ago, longDate, dateTime, toUnit, distUnit, DASH } from '../lib/format.js';
@@ -65,7 +66,7 @@
 {#if error}
   <div class="card">Could not load health data: {error}</div>
 {:else if !h}
-  <div class="muted">Loading…</div>
+  <Skeleton label="Loading health" />
 {:else}
   {#if !h.rest.last_poll}
     <div class="card note">
@@ -209,7 +210,7 @@
   .sched th:first-child, .sched td:first-child { padding-left: 0; }
   .sched th:last-child, .sched td:last-child { padding-right: 0; }
   .sched td .num { display: block; white-space: nowrap; }
-  .dist-inline { display: none; }
+  .dist-inline { display: none; white-space: nowrap; }
   .sched .r { text-align: right; }
   .state { font-weight: 600; font-size: 12px; white-space: nowrap; }
 
