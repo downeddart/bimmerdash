@@ -65,6 +65,9 @@
     map = L.map(el, { zoomControl: true, attributionControl: true, scrollWheelZoom: false });
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
+      // OSM's tile policy requires a Referer. The app's own policy (same-origin) sends
+      // none cross-site, so the tiles send just the origin, never the page path.
+      referrerPolicy: 'strict-origin-when-cross-origin',
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     }).addTo(map);
     layer = L.layerGroup().addTo(map);
