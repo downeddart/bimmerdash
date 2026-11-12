@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 @dataclass(frozen=True)
@@ -37,12 +38,19 @@ def payload_hash(payload: object) -> bytes:
     return hashlib.md5(canonical.encode()).digest()
 
 
+VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+FUTURE_SLACK = timedelta(days=1)
+
+
 def vin_of(record: dict) -> str | None:
+    """The car a record belongs to. A well-formed VIN in the topic wins (that is what we
+    subscribed to); otherwise the payload's VIN; anything malformed is ignored."""
+    last = str(record.get("topic", "")).rsplit("/", 1)[-1]
+    if VIN_RE.match(last):
+        return last
     payload = record.get("payload")
-    if isinstance(payload, dict) and isinstance(payload.get("vin"), str):
-        return payload["vin"]
-    last = record.get("topic", "").rsplit("/", 1)[-1]
-    return last if len(last) == 17 else None
+    vin = payload.get("vin") if isinstance(payload, dict) else None
+    return vin if isinstance(vin, str) and VIN_RE.match(vin) else None
 
 
 def numeric(value: object) -> float | None:
@@ -62,7 +70,9 @@ def data_points(record: dict) -> list[DataPoint]:
     data = payload.get("data")
     if not isinstance(data, dict):
         return []
-    fallback = _time_or_none(payload.get("timestamp")) or parse_time(record["received_at"])
+    received = parse_time(record["received_at"])
+    fallback = _time_or_none(payload.get("timestamp")) or received
+    latest_ok = received + FUTURE_SLACK
     points = []
     for key, point in data.items():
         if isinstance(point, dict):
@@ -71,7 +81,8 @@ def data_points(record: dict) -> list[DataPoint]:
             value, unit, ts = point, None, None
         points.append(
             DataPoint(
-                time=_time_or_none(ts) or fallback,
+                # A point dated far ahead would pin "latest" for good; use arrival time.
+                time=t if (t := _time_or_none(ts) or fallback) <= latest_ok else received,
                 vin=vin,
                 key=key,
                 value=value,

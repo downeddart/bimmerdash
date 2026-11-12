@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 BASE_URL = "https://www.fuel-finder.service.gov.uk/api/v1"
 PAGE_SIZE = 500
+MAX_PAGES = 1000  # about 500k rows; the whole UK is a few tens of thousands
 
 
 class FuelFinderError(Exception):
@@ -113,6 +114,9 @@ class FuelFinderClient:
             if len(page) < PAGE_SIZE:
                 return
             batch += 1
+            if batch > MAX_PAGES:
+                # A feed that never ends would page forever; fail this sync instead.
+                raise FuelFinderError(f"{path}: more than {MAX_PAGES} pages, giving up")
 
     def forecourts(self) -> Iterator[list[dict]]:
         return self._pages("/pfs")

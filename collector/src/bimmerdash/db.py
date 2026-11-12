@@ -241,7 +241,8 @@ class Database:
 
     def set_fuel_finder_state(self, **fields) -> None:
         allowed = {"forecourts_at", "full_prices_at", "incremental_at", "uk_averages_at"}
-        assert set(fields) <= allowed
+        if not set(fields) <= allowed:  # names become SQL identifiers below
+            raise ValueError(f"unknown fuel_finder_state fields: {sorted(set(fields) - allowed)}")
         sets = ", ".join(f"{k} = %s" for k in fields)
         self.conn.execute(f"UPDATE fuel_finder_state SET {sets}", tuple(fields.values()))
         self.conn.commit()
