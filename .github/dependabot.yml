@@ -9,6 +9,13 @@ updates:
   - package-ecosystem: docker
     directories: [/collector, /web]
     schedule: { interval: weekly }
+    # Base image versions move by hand: both images on the same Python once its wheels
+    # (Pillow, psycopg) exist, and Node on an LTS line. Digest updates still come through.
+    ignore:
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+      - dependency-name: node
+        update-types: [version-update:semver-major]
   - package-ecosystem: docker-compose
     directory: /
     schedule: { interval: weekly }
@@ -19,4 +26,7 @@ updates:
   - package-ecosystem: npm
     directory: /web/frontend
     schedule: { interval: weekly }
-    groups: { frontend: { update-types: [minor, patch] } }
+    groups:
+      # Vite and its Svelte plugin must move together (peer dependencies).
+      vite: { patterns: [vite, "@sveltejs/vite-plugin-svelte*"] }
+      frontend: { update-types: [minor, patch] }
