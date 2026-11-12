@@ -74,6 +74,63 @@
   const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups', assumed: 'a typical figure until the car reports its own' };
   const SOURCE = { station: 'station price', receipt: 'receipt', uk_average: 'UK avg' };
 
+  // Receipt entry: one fill-up at a time, keyed by its time.
+  let editing = $state(null);
+  let costIn = $state('');
+  let litresIn = $state('');
+  let receiptError = $state(null);
+  let saving = $state(false);
+  let wrapW = $state(0); // visible width of the scrolling table, so the form fits a phone
+  const litres = (v, exact) => `${new Intl.NumberFormat('en-GB', { maximumFractionDigits: exact ? 2 : 1 }).format(v)} L`;
+
+  function startReceipt(f) {
+    editing = f.time;
+    costIn = f.receipt ? String(f.receipt.cost_gbp) : '';
+    litresIn = f.receipt?.litres ? String(f.receipt.litres) : '';
+    receiptError = null;
+  }
+
+  const parseNum = (v) => {
+    const n = Number(String(v).replace(/[£,\s]/g, ''));
+    return String(v).trim() && Number.isFinite(n) ? n : null;
+  };
+
+  async function reload() {
+    data = await api.fuel(vehicle.vin);
+  }
+
+  async function saveReceipt(f) {
+    const cost = parseNum(costIn);
+    const litres = String(litresIn).trim() ? parseNum(litresIn) : null;
+    if (cost == null || cost <= 0) return (receiptError = 'Enter the amount you paid, e.g. 50.04.');
+    if (String(litresIn).trim() && (litres == null || litres <= 0)) return (receiptError = 'Litres must be a number, or leave it blank.');
+    saving = true;
+    receiptError = null;
+    try {
+      await api.putReceipt(vehicle.vin, { time: f.time, cost_gbp: cost, litres });
+      editing = null;
+      await reload();
+    } catch (e) {
+      receiptError = e.message;
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function removeReceipt(f) {
+    saving = true;
+    receiptError = null;
+    try {
+      await api.deleteReceipt(vehicle.vin, f.time);
+      editing = null;
+      await reload();
+    } catch (e) {
+      receiptError = e.message;
+    } finally {
+      saving = false;
+    }
+  }
+
   onMount(() => {
     api.fuel(vehicle.vin).then((d) => (data = d)).catch((e) => (error = e.message));
     api.nearby(vehicle.vin).then((d) => (nearby = d)).catch(() => (nearby = { stations: [] }));
@@ -226,10 +283,10 @@
     {#if !fills.length}
       <p class="muted">No fill-ups detected yet. After you next fill up, it appears here once the car reports its new fuel level, priced at that station's price where it can be matched.</p>
     {:else}
-      <div class="table-wrap">
+      <div class="table-wrap" bind:clientWidth={wrapW}>
         <table>
           <thead>
-            <tr><th>Date</th><th>Station</th><th class="r">Added</th><th class="r">Cost</th><th>Tank</th><th class="r">Since last</th><th class="r">Economy</th></tr>
+            <tr><th>Date</th><th>Station</th><th class="r">Added</th><th class="r">Cost</th><th>Tank</th><th class="r">Since last</th><th class="r">Economy</th><th><span class="sr-only">Receipt</span></th></tr>
           </thead>
           <tbody>
             {#each fills as f}
@@ -247,17 +304,53 @@
                     {/if}
                   {/if}
                 </td>
-                <td class="r">{f.litres_added != null ? `${f.litres_estimated ? '≈' : ''}${num(f.litres_added, 1)} L` : DASH}</td>
-                <td class="r num" class:est={isAvg(f)}>{f.cost_gbp != null ? `${isAvg(f) ? '~' : ''}${money(f.cost_gbp)}` : DASH}</td>
+                <td class="r">
+                  {f.litres_added != null ? `${f.litres_estimated ? '≈' : ''}${litres(f.litres_added, f.receipt)}` : DASH}
+                  {#if f.receipt && f.litres_sensor != null}<div class="small muted nowrap">car read {num(f.litres_sensor)} L</div>{/if}
+                </td>
+                <td class="r num" class:est={isAvg(f)}>
+                  {f.cost_gbp != null ? `${isAvg(f) ? '~' : ''}${money(f.cost_gbp)}` : DASH}
+                  {#if f.receipt}<div><span class="tag ok">receipt</span></div>{/if}
+                </td>
                 <td class="small">{f.percent_before != null ? `${num(f.percent_before)}% → ${num(f.percent_after)}%` : DASH}</td>
                 <td class="r">{f.km_since_last != null ? `${num(toUnit(f.km_since_last, prefs.distance))} ${distUnit(prefs.distance)}` : DASH}</td>
                 <td class="r">{f.economy_l100 != null ? `${economy(f.economy_l100, prefs.economy)}` : DASH}</td>
+                <td class="r">
+                  {#if editing !== f.time}
+                    <button class="btn ghost" onclick={() => startReceipt(f)} aria-label={`${f.receipt ? 'Edit' : 'Add'} receipt for ${longDate(f.time)}`}>{f.receipt ? 'Edit' : 'Add receipt'}</button>
+                  {/if}
+                </td>
               </tr>
+              {#if editing === f.time}
+                <tr class="edit-row">
+                  <td colspan="8">
+                    <form class="receipt-form" style:width={wrapW ? `${wrapW - 20}px` : null} onsubmit={(e) => { e.preventDefault(); saveReceipt(f); }}>
+                      <label>
+                        <span class="small muted">Paid</span>
+                        <span class="money-in"><span aria-hidden="true">£</span>
+                          <!-- svelte-ignore a11y_autofocus -->
+                          <input bind:value={costIn} inputmode="decimal" placeholder="50.04" aria-label="Amount paid in pounds" autofocus />
+                        </span>
+                      </label>
+                      <label>
+                        <span class="small muted">Litres <span class="muted">(optional)</span></span>
+                        <input bind:value={litresIn} inputmode="decimal" placeholder={f.price_source === 'station' || f.receipt ? 'worked out from price' : 'from receipt'} aria-label="Litres from the receipt" />
+                      </label>
+                      <div class="receipt-actions">
+                        <button class="btn" type="submit" disabled={saving}>Save</button>
+                        <button class="btn ghost" type="button" onclick={() => (editing = null)}>Cancel</button>
+                        {#if f.receipt}<button class="btn ghost" type="button" disabled={saving} onclick={() => removeReceipt(f)}>Remove receipt</button>{/if}
+                      </div>
+                    </form>
+                    {#if receiptError}<p class="small bad-text" role="alert">{receiptError}</p>{/if}
+                  </td>
+                </tr>
+              {/if}
             {/each}
           </tbody>
         </table>
       </div>
-      <p class="small muted">Litres added are from the car's fuel sensor, so they can differ from the receipt by a litre or two.</p>
+      <p class="small muted">The car reports fuel in whole litres, so a fill-up's litres and cost can be out by a litre either way. Add the receipt for the exact figures.</p>
     {/if}
   </div>
 {/if}
@@ -288,10 +381,19 @@
   .st-name { font-weight: 500; }
   .price { font-size: 18px; }
   .price.best { color: var(--ok); }
-  .table-wrap { overflow-x: auto; }
+  /* relative: keeps absolutely positioned bits (screen-reader labels) inside the scroller */
+  .table-wrap { overflow-x: auto; position: relative; }
   table { width: 100%; border-collapse: collapse; min-width: 720px; }
   th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 500; padding: 0 10px 10px; }
   td { padding: 12px 10px; border-top: 1px solid var(--line); vertical-align: top; }
   .r { text-align: right; }
+  .tag.ok { background: var(--ok-bg); color: var(--ok); margin-top: 4px; }
+  .nowrap { white-space: nowrap; }
+  .edit-row td { border-top: 0; padding-top: 0; }
+  .receipt-form { position: sticky; left: 10px; box-sizing: border-box; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; padding: 12px; background: var(--card-2); border: 1px solid var(--line); border-radius: 8px; }
+  .receipt-form label { display: flex; flex-direction: column; gap: 4px; }
+  .receipt-form input { width: 140px; max-width: 100%; }
+  .money-in { display: inline-flex; align-items: center; gap: 6px; }
+  .receipt-actions { display: flex; gap: 6px; }
   code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 4px; }
 </style>

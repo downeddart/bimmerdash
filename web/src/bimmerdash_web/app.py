@@ -12,10 +12,11 @@ from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from psycopg_pool import ConnectionPool
+from pydantic import AwareDatetime
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.gzip import GZipMiddleware
 
-from . import advisor, auth, derived, queries, settings, usage
+from . import advisor, auth, derived, queries, receipts, settings, usage
 from .health import health as health_report
 
 VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
@@ -258,6 +259,20 @@ def create_app(database_url: str | None = None) -> FastAPI:
     def fuel(vin: str):
         with pool.connection() as conn:
             return derived.fuel(conn, vin_or_404(vin))
+
+    @app.put("/api/vehicles/{vin}/fillups/receipt")
+    def put_receipt(vin: str, body: receipts.Receipt):
+        with pool.connection() as conn:
+            if not receipts.save(conn, vin_or_404(vin), body):
+                raise HTTPException(404, "no fill-up at that time")
+            return {"ok": True}
+
+    @app.delete("/api/vehicles/{vin}/fillups/receipt")
+    def delete_receipt(vin: str, time: AwareDatetime):
+        with pool.connection() as conn:
+            if not receipts.delete(conn, vin_or_404(vin), time):
+                raise HTTPException(404, "no receipt for that fill-up")
+            return {"ok": True}
 
     @app.get("/api/vehicles/{vin}/fuel/nearby")
     def nearby(vin: str, radius_km: float = 5):

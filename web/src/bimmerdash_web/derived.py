@@ -130,6 +130,9 @@ def fuel(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dic
         )
     )
     with_intervals(fills)
+    from . import receipts
+
+    receipts.apply(fills, receipts.load(conn, vin))
     for f in fills:
         if f["station"] and f["station"].get("trading_name"):
             f["station"]["trading_name"] = tidy_name(f["station"]["trading_name"])

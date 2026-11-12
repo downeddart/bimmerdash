@@ -663,3 +663,84 @@ def test_car_image_revalidates_with_etag(client):
     etag = first.headers["etag"]
     again = client.get(f"/api/vehicles/{VIN}/image", headers={"If-None-Match": etag})
     assert again.status_code == 304 and again.content == b""
+
+
+def test_receipt_applies_to_nearest_fillup():
+    from datetime import UTC, datetime, timedelta
+
+    from bimmerdash_web.receipts import apply
+
+    t = datetime(2026, 11, 12, 18, 14, tzinfo=UTC)
+
+    def fill(at, source="station", ppl=166.9, litres=29):
+        return {
+            "time": at,
+            "price_source": source,
+            "price_ppl": ppl,
+            "litres_added": litres,
+            "litres_estimated": False,
+            "cost_gbp": 48.4,
+        }
+
+    # Station price known: litres from the receipt total at that price.
+    fills = [fill(t - timedelta(days=9)), fill(t)]
+    apply(fills, [{"time": t + timedelta(minutes=3), "cost_gbp": 50.04, "litres": None}])
+    assert fills[0]["receipt"] is None and fills[0]["cost_gbp"] == 48.4
+    f = fills[1]
+    assert f["cost_gbp"] == 50.04 and f["price_source"] == "receipt" and f["price_ppl"] == 166.9
+    assert f["litres_added"] == 29.98 and f["litres_sensor"] == 29
+
+    # Litres on the receipt win and set the price paid.
+    [f] = [fill(t, source="uk_average", ppl=140.0)]
+    apply([f], [{"time": t, "cost_gbp": 50.04, "litres": 30.0}])
+    assert f["litres_added"] == 30.0 and f["price_ppl"] == 166.8
+
+    # UK average only: keep the car's litres, derive the price from them.
+    f = fill(t, source="uk_average", ppl=140.0)
+    apply([f], [{"time": t, "cost_gbp": 50.04, "litres": None}])
+    assert f["litres_added"] == 29 and f["price_ppl"] == 172.6
+
+    # Too far from any fill-up: ignored.
+    f = fill(t)
+    apply([f], [{"time": t + timedelta(hours=7), "cost_gbp": 50.04, "litres": None}])
+    assert f["receipt"] is None and f["cost_gbp"] == 48.4
+
+
+def test_receipt_endpoints(client):
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute(
+            "INSERT INTO fillups (vin, time, odometer, litres_before, litres_after,"
+            " litres_added, price_ppl, price_source, cost_gbp)"
+            " VALUES (%s, '2026-11-12T18:14:04Z', 106732, 17, 46, 29, 166.9, 'station', 48.4)",
+            (VIN,),
+        )
+    url = f"/api/vehicles/{VIN}/fillups/receipt"
+    t = "2026-11-12T18:14:04+00:00"
+    assert client.put(url, json={"time": t, "cost_gbp": 50.04}).json() == {"ok": True}
+    f = client.get(f"/api/vehicles/{VIN}/fuel").json()
+    assert f["fillups"][0]["cost_gbp"] == 50.04 and f["fillups"][0]["litres_added"] == 29.98
+    assert f["summary"]["total_cost"] == 50.04
+
+    # A rebuild that nudges the fill-up's time keeps the receipt; re-saving replaces it.
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute("UPDATE fillups SET time = time + interval '2 minutes' WHERE vin = %s", (VIN,))
+    f = client.get(f"/api/vehicles/{VIN}/fuel").json()["fillups"][0]
+    assert f["receipt"] == {"cost_gbp": 50.04, "litres": None}
+    moved = f["time"]
+    assert client.put(url, json={"time": moved, "cost_gbp": 51, "litres": 30.5}).status_code == 200
+    with psycopg.connect(URL) as c:
+        assert c.execute("SELECT count(*) FROM fillup_receipts").fetchone()[0] == 1
+
+    assert client.put(url, json={"time": "2026-10-01T00:00:00Z", "cost_gbp": 5}).status_code == 404
+    assert client.put(url, json={"time": t, "cost_gbp": -1}).status_code == 422
+    assert client.put(url, json={"time": t, "cost_gbp": 50, "litres": 999}).status_code == 422
+    assert client.put(url, json={"time": "2026-11-12T18:14:04", "cost_gbp": 50}).status_code == 422
+    assert (
+        client.put("/api/vehicles/x/fillups/receipt", json={"time": t, "cost_gbp": 5}).status_code
+        == 404
+    )
+
+    assert client.delete(url, params={"time": moved}).json() == {"ok": True}
+    f = client.get(f"/api/vehicles/{VIN}/fuel").json()["fillups"][0]
+    assert f["receipt"] is None and f["cost_gbp"] == 48.4
+    assert client.delete(url, params={"time": moved}).status_code == 404
