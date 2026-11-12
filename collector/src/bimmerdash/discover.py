@@ -18,6 +18,16 @@ class KeyStats:
     unit: str | None = None
 
 
+def iter_lines(paths: Iterable[Path]):
+    """Yield ("file:line", text) for every non-empty line, without parsing it."""
+    for path in sorted(paths):
+        with path.open(errors="replace") as f:
+            for n, line in enumerate(f, 1):
+                line = line.strip()
+                if line:
+                    yield f"{path.name}:{n}", line
+
+
 def iter_records(paths: Iterable[Path]):
     for path in sorted(paths):
         with path.open() as f:

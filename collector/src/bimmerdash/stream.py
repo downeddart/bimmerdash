@@ -20,7 +20,7 @@ import paho.mqtt.client as mqtt
 
 from . import alerts
 from .auth import AuthError, TokenStore, refresh
-from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details, normalise_image
+from .cardata_api import CarDataApi, fetch_vehicle_details, normalise_image
 from .config import Config
 from .db import Database
 from .derive import rebuild_all, settings_changed_at
@@ -174,7 +174,7 @@ def run_stream(cfg: Config) -> int:
                 return  # wait for the refresh below
             try:
                 fetch_vehicle_details(api, main_db, vin)
-            except (QuotaExceeded, httpx.HTTPError, ValueError) as e:
+            except Exception as e:  # back off this car whatever went wrong, then try the next
                 failed_at[vin] = time.monotonic()
                 log.warning("could not fetch vehicle details: %s", e)
 

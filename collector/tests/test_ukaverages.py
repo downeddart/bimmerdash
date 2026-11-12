@@ -34,6 +34,11 @@ def test_parse_csv_rejects_unknown_format():
         parse_csv("Week,Price\n01/01/2026,1\n")
 
 
+def test_parse_csv_rejects_empty_file():
+    with pytest.raises(ValueError):
+        parse_csv("")
+
+
 def test_fetch_all_discovers_csvs_via_content_api():
     def handler(req: httpx.Request):
         if str(req.url) == CONTENT_API:

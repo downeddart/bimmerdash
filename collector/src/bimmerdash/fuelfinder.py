@@ -8,6 +8,7 @@ history that later lets a detected fill-up be costed at the price on that day.
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from collections.abc import Callable, Iterator
@@ -128,8 +129,8 @@ class FuelFinderClient:
 # --- parsing --------------------------------------------------------------------
 
 
-def _parse_time(value: str | None) -> datetime | None:
-    if not value:
+def _parse_time(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value:
         return None
     try:
         t = datetime.fromisoformat(value.replace("Z", "+00:00"))
@@ -138,35 +139,56 @@ def _parse_time(value: str | None) -> datetime | None:
     return t if t.tzinfo else t.replace(tzinfo=UTC)
 
 
+def _float(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
+
+
+def _text(value: object) -> str | None:
+    return value if isinstance(value, str) else None
+
+
+def _flag(value: object) -> bool | None:
+    return value if isinstance(value, bool) else None
+
+
 def forecourt_row(d: dict) -> tuple:
-    loc = d.get("location") or {}
-    lat, lon = loc.get("latitude"), loc.get("longitude")
+    loc = d.get("location")
+    loc = loc if isinstance(loc, dict) else {}
+    fuels = d.get("fuel_types")
     return (
         d["node_id"],
-        d.get("trading_name"),
-        d.get("brand_name"),
-        loc.get("postcode"),
-        float(lat) if lat is not None else None,
-        float(lon) if lon is not None else None,
-        d.get("is_motorway_service_station"),
-        d.get("is_supermarket_service_station"),
+        _text(d.get("trading_name")),
+        _text(d.get("brand_name")),
+        _text(loc.get("postcode")),
+        _float(loc.get("latitude")),
+        _float(loc.get("longitude")),
+        _flag(d.get("is_motorway_service_station")),
+        _flag(d.get("is_supermarket_service_station")),
         bool(d.get("temporary_closure") or d.get("permanent_closure")),
-        d.get("fuel_types"),
+        [f for f in fuels if isinstance(f, str)] if isinstance(fuels, list) else None,
     )
 
 
 def price_rows(d: dict, observed_at: datetime) -> list[tuple]:
     rows = []
     for fp in d.get("fuel_prices") or []:
-        price = fp.get("price")
-        if price in (None, "") or not fp.get("fuel_type"):
+        if not isinstance(fp, dict):
+            continue
+        price = _float(fp.get("price"))
+        if price is None or not isinstance(fp.get("fuel_type"), str) or not fp["fuel_type"]:
             continue
         effective = (
             _parse_time(fp.get("price_change_effective_timestamp"))
             or _parse_time(fp.get("price_last_updated"))
             or observed_at
         )
-        rows.append((d["node_id"], fp["fuel_type"], effective, float(price)))
+        rows.append((d["node_id"], fp["fuel_type"], effective, price))
     return rows
 
 
@@ -255,7 +277,7 @@ def run_prices(cfg, interval: float = 1800) -> int:
                 n = sync_uk_averages(http, db)
                 if n is not None:
                     log.info("UK weekly average prices synced: %d row(s)", n)
-            except (httpx.HTTPError, KeyError, ValueError) as e:
+            except Exception as e:  # unexpected upstream data must never stop the worker
                 log.error("UK average price sync failed: %s: %s", e.__class__.__name__, e)
                 db._conn = None
             if client is not None:
@@ -268,7 +290,7 @@ def run_prices(cfg, interval: float = 1800) -> int:
                     )
                 except FuelFinderError as e:
                     log.error("%s", e)
-                except (httpx.HTTPError, KeyError, ValueError) as e:
+                except Exception as e:  # unexpected upstream data must never stop the worker
                     log.error("fuel price sync failed: %s: %s", e.__class__.__name__, e)
                     db._conn = None
             stop.wait(interval)

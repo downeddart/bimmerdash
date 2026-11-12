@@ -36,7 +36,9 @@ def csv_urls(http: httpx.Client) -> list[str]:
 def parse_csv(text: str) -> list[tuple[date, str, float]]:
     """Rows of (week_start, fuel, pence per litre) from one DESNZ CSV."""
     reader = csv.reader(io.StringIO(text.lstrip("﻿")))
-    header = next(reader)
+    header = next(reader, None)
+    if not header:
+        raise ValueError("empty CSV")
     cols = {}
     for fuel, code in COLUMNS.items():
         for i, name in enumerate(header):
