@@ -135,6 +135,20 @@ service to the proxy's address (uvicorn then trusts its `X-Forwarded-*` headers)
 `BIMMERDASH_COOKIE_SECURE=true` if you only need the cookie flag. Without either, every
 client appears to come from the proxy and shares one failed-login counter.
 
+### A separate database role for the web UI
+
+Optional, recommended. The web UI only needs to write its own tables (login, sessions,
+settings, places). Give it a role that can't do more:
+
+```sh
+echo "BIMMERDASH_WEB_DB_USER=bimmerdash_web" >> .env
+echo "BIMMERDASH_WEB_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
+docker compose up -d
+```
+
+The collector creates the role and sets its password when it starts; the web UI then
+connects with it. Without these two lines the UI uses the main role, as before.
+
 ## Privacy
 
 Everything stays on your machine. The data volume holds your BMW tokens, VIN and GPS
@@ -161,6 +175,18 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
 Install [pre-commit](https://pre-commit.com) (`pre-commit install`) so gitleaks checks
 every commit for secrets.
+
+### Updating dependencies
+
+Images install Python packages only from the hash-locked `collector/requirements.txt`
+and `web/requirements.txt`, and use base images pinned by digest. Dependabot proposes
+updates weekly. To change a dependency by hand, edit `pyproject.toml` and regenerate the
+lock in the same folder:
+
+```sh
+pip install "pip-tools==7.4.1" "click<8.2"
+pip-compile --allow-unsafe --generate-hashes --strip-extras -o requirements.txt pyproject.toml
+```
 
 ## License
 

@@ -1,0 +1,22 @@
+# Keeps the pinned versions current: actions (by commit SHA), base images (by digest),
+# Python dependencies (hash-locked requirements.txt) and the frontend lockfile.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly }
+    groups: { actions: { patterns: ["*"] } }
+  - package-ecosystem: docker
+    directories: [/collector, /web]
+    schedule: { interval: weekly }
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule: { interval: weekly }
+  - package-ecosystem: pip
+    directories: [/collector, /web]
+    schedule: { interval: weekly }
+    groups: { python: { update-types: [minor, patch] } }
+  - package-ecosystem: npm
+    directory: /web/frontend
+    schedule: { interval: weekly }
+    groups: { frontend: { update-types: [minor, patch] } }
