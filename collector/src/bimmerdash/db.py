@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from datetime import timedelta
 from importlib import resources
 
 import psycopg
+from psycopg import sql
 from psycopg.types.json import Jsonb
 
 from .records import data_points, parse_time, payload_hash, vin_of
@@ -17,6 +19,7 @@ log = logging.getLogger(__name__)
 
 # Any fixed number, the same in every process that migrates this database.
 MIGRATION_LOCK = 0x626D7764  # "bmwd"
+WEB_ROLE = "bimmerdash_web"
 
 
 def migrate(conn: psycopg.Connection) -> list[str]:
@@ -79,7 +82,21 @@ class Database:
             self._conn.close()
 
     def migrate(self) -> list[str]:
-        return migrate(self.conn)
+        applied = migrate(self.conn)
+        self.set_web_password(os.environ.get("BIMMERDASH_WEB_DB_PASSWORD") or None)
+        return applied
+
+    def set_web_password(self, password: str | None) -> None:
+        """Let the web UI's read-mostly role log in with this password (see migration 009).
+        Nothing changes without one, so existing setups keep working as before."""
+        if not password:
+            return
+        self.conn.execute(
+            sql.SQL("ALTER ROLE {} WITH LOGIN PASSWORD {}").format(
+                sql.Identifier(WEB_ROLE), sql.Literal(password)
+            )
+        )
+        self.conn.commit()
 
     def recompress_images(self, normalise) -> int:
         """Re-encode stored car images not yet in the current format (one-off after an
