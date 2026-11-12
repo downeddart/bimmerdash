@@ -503,6 +503,24 @@ def test_fuel_advisor_counts_the_detour(client):
     assert a["radius_km"] == 8
 
 
+def test_fuel_advisor_tolerates_placeholders(client):
+    # The car sends "-" for values it doesn't know; that must not break the page.
+    with psycopg.connect(URL, autocommit=True) as c:
+        _latest(
+            c,
+            {
+                "vehicle.cabin.infotainment.navigation.currentLocation.latitude": "inf",
+                "vehicle.cabin.infotainment.navigation.currentLocation.longitude": -1.0,
+                "vehicle.drivetrain.fuelSystem.remainingFuel": "-",
+                "vehicle.drivetrain.fuelSystem.level": "-",
+                "vehicle.drivetrain.lastRemainingRange": "-",
+            },
+        )
+    r = client.get(f"/api/vehicles/{VIN}/fuel/advisor")
+    assert r.status_code == 200
+    assert r.json()["fuel"]["litres"] is None
+
+
 def test_car_economy_costs_routes_and_mileage_limit(client):
     fuel_key = "vehicle.drivetrain.fuelSystem.consumptionOverLifeTime.overall.fuel"
     dist_key = "vehicle.drivetrain.fuelSystem.consumptionOverLifeTime.overall.referenceDistance"

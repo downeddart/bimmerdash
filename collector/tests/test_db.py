@@ -347,3 +347,112 @@ def test_alerts_raise_once_then_clear(db):
     db.conn.commit()
     push(150, "2026-11-10T19:00:00+00:00")
     assert alerts.run(db, FakeNotifier(), now + timedelta(hours=3)) == 0
+
+
+OTHER_VIN = "WBA0000000TEST001"
+
+
+def _point(vin, ts, data):
+    return {
+        "received_at": ts,
+        "topic": f"00000000-0000-0000-0000-000000000000/{vin}",
+        "payload": {
+            "vin": vin,
+            "timestamp": ts,
+            "data": {k: {"value": v, "timestamp": ts} for k, v in data.items()},
+        },
+    }
+
+
+def test_rebuild_skips_placeholders_and_isolates_cars(db, monkeypatch):
+    from bimmerdash import derive
+
+    door, odo = derive.DOORS, derive.ODOMETER
+    # The car sometimes sends "-" for a number; that point is skipped, not fatal.
+    for vin in (VIN, OTHER_VIN):
+        for ts, data in [
+            ("2026-11-09T07:00:00+00:00", {door: "SECURED", odo: 1000}),
+            ("2026-11-09T07:30:00+00:00", {odo: "-"}),
+            ("2026-11-09T08:00:00+00:00", {door: "UNLOCKED", odo: 1000}),
+            ("2026-11-09T08:30:00+00:00", {door: "LOCKED", odo: 1020}),
+        ]:
+            db.ingest(_point(vin, ts, data))
+    out = derive.rebuild_all(db)
+    assert out[VIN][0] == 1 and out[OTHER_VIN][0] == 1
+
+    # And if one car's rebuild fails for any reason, the others still run.
+    real = derive.rebuild
+
+    def flaky(d, vin, now=None):
+        if vin == VIN:
+            raise ValueError("boom")
+        return real(d, vin, now)
+
+    monkeypatch.setattr(derive, "rebuild", flaky)
+    out = derive.rebuild_all(db)
+    assert VIN not in out and out[OTHER_VIN][0] == 1
+
+
+def test_alerts_one_car_failing_does_not_stop_others(db, monkeypatch):
+    from bimmerdash import alerts
+
+    for vin in (VIN, OTHER_VIN):
+        db.ingest(_point(vin, "2026-11-10T16:00:00+00:00", {alerts.FUEL_PERCENT: 5}))
+    real = alerts.evaluate
+
+    def flaky(conn, vin, *a, **k):
+        if vin == VIN:
+            raise ValueError("math domain error")
+        return real(conn, vin, *a, **k)
+
+    monkeypatch.setattr(alerts, "evaluate", flaky)
+
+    class Quiet:
+        configured = False
+
+    now = datetime(2026, 11, 10, 17, 0, tzinfo=UTC)
+    assert alerts.run(db, Quiet(), now) == 1
+    assert q(db, "SELECT vin, kind FROM alerts") == [(OTHER_VIN, "low_fuel")]
+
+
+def test_alerts_ignore_non_finite_position(db):
+    from bimmerdash import alerts
+
+    lat = "vehicle.cabin.infotainment.navigation.currentLocation.latitude"
+    lon = "vehicle.cabin.infotainment.navigation.currentLocation.longitude"
+    db.ingest(
+        _point(VIN, "2026-11-10T16:00:00+00:00", {alerts.FUEL_PERCENT: 5, lat: "inf", lon: -1.0})
+    )
+
+    class Quiet:
+        configured = False
+
+    assert alerts.run(db, Quiet(), datetime(2026, 11, 10, 17, 0, tzinfo=UTC)) == 1
+
+
+def test_import_raw_skips_bad_records(db, tmp_path, capsys):
+    import json
+
+    from bimmerdash.__main__ import cmd_import_raw
+    from bimmerdash.config import Config
+
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    good = rec("2026-01-01T10:00:00+00:00", 100, "2026-01-01T10:00:00Z")
+    bad = rec("2026-01-01T10:01:00+00:00", 101, "2026-01-01T10:01:00Z")
+    bad["payload"]["data"]["vehicle.vehicle.travelledDistance"]["timestamp"] = 1767261660
+    bad["payload"]["timestamp"] = None
+    later = rec("2026-01-02T10:00:00+00:00", 102, "2026-01-02T10:00:00Z")
+    (raw / "2026-01-01.jsonl").write_text(
+        json.dumps(good)
+        + "\n"
+        + '{"received_at": "2026-01-01T10:00:30+00:00", "top\n'
+        + json.dumps(bad)
+        + "\n"
+    )
+    (raw / "2026-01-02.jsonl").write_text(json.dumps(later) + "\n")
+    cfg = Config(client_id="", vin=None, data_dir=tmp_path, database_url=URL)
+    assert cmd_import_raw(cfg) == 0
+    # The truncated line is skipped; the int timestamp falls back to received_at.
+    assert q(db, "SELECT count(*) FROM raw_messages") == [(3,)]
+    assert "Skipped 1 unreadable record(s)" in capsys.readouterr().out

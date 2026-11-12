@@ -35,7 +35,12 @@
         fillColor: colour(m.colour),
         fillOpacity: 1,
       }).addTo(layer);
-      if (m.label) c.bindTooltip(m.label);
+      if (m.label) {
+        // Labels carry third-party text (station names); Leaflet treats a string as HTML.
+        const tip = document.createElement('span');
+        tip.textContent = m.label;
+        c.bindTooltip(tip);
+      }
       pts.push([m.lat, m.lon]);
     }
     if (pts.length === 1) map.setView(pts[0], 15);

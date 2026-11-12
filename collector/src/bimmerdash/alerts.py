@@ -93,9 +93,11 @@ def _v(lv: Latest, key: str):
 def _num(lv: Latest, key: str) -> float | None:
     v = _v(lv, key)
     try:
-        return None if v is None or isinstance(v, bool) else float(v)
+        f = None if v is None or isinstance(v, bool) else float(v)
     except (TypeError, ValueError):
         return None
+    # "inf"/"nan" strings parse as floats but are not readings.
+    return f if f is not None and math.isfinite(f) else None
 
 
 def _is_open(v) -> bool:
@@ -343,7 +345,8 @@ def evaluate(conn, vin: str, cfg: dict, open_refs: dict[str, set[str]], now: dat
         lat, lon = _num(lv, LATITUDE), _num(lv, LONGITUDE)
         pct = _num(lv, FUEL_PERCENT)
         near_threshold = pct is not None and pct <= cfg["low_fuel_percent"] + 5
-        if near_threshold and lat is not None and lon is not None:
+        located = lat is not None and lon is not None and abs(lat) <= 90 and abs(lon) <= 180
+        if near_threshold and located:
             grade = conn.execute(
                 "SELECT COALESCE(fuel_grade, 'E10') FROM vehicles WHERE vin = %s", (vin,)
             ).fetchone()
@@ -415,35 +418,53 @@ def run(db, notifier: Notifier, now: datetime | None = None) -> int:
         return 0
     raised = 0
     for (vin,) in conn.execute("SELECT vin FROM vehicles").fetchall():
-        open_rows = conn.execute(
-            "SELECT id, kind, ref FROM alerts WHERE vin = %s AND cleared_at IS NULL", (vin,)
-        ).fetchall()
-        open_refs: dict[str, set[str]] = {}
-        for _, kind, ref in open_rows:
-            open_refs.setdefault(kind, set()).add(ref)
-        current = evaluate(conn, vin, cfg, open_refs, now)
-        active = {(a.kind, a.ref) for a in current}
-        for alert_id, kind, ref in open_rows:
-            if (kind, ref) not in active:
-                conn.execute("UPDATE alerts SET cleared_at = %s WHERE id = %s", (now, alert_id))
-        new = [a for a in current if a.ref not in open_refs.get(a.kind, set())]
-        for a in new:
-            alert_id = conn.execute(
-                "INSERT INTO alerts (vin, kind, ref, title, message, raised_at)"
-                " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
-                (vin, a.kind, a.ref, a.title, a.message, now),
-            ).fetchone()[0]
-            conn.commit()
-            raised += 1
-            if not notifier.configured:
-                continue
-            try:
-                notifier.send(a)
-                conn.execute("UPDATE alerts SET sent_at = now() WHERE id = %s", (alert_id,))
-            except httpx.HTTPError as e:
-                status = getattr(getattr(e, "response", None), "status_code", None)
-                err = f"HTTP {status}" if status else e.__class__.__name__
-                log.warning("Pushover send failed: %s", err)
-                conn.execute("UPDATE alerts SET send_error = %s WHERE id = %s", (err, alert_id))
+        # One car's bad data must not stop alerts for the others.
+        try:
+            raised += _run_vin(conn, notifier, vin, cfg, now)
+        except Exception as e:
+            conn.rollback()
+            log.error("alert check failed for %s…: %s", vin[:5], e.__class__.__name__)
+    return raised
+
+
+def _run_vin(conn, notifier: Notifier, vin: str, cfg: dict, now: datetime) -> int:
+    """Evaluate one car: store new alerts, clear finished ones, push new ones."""
+    raised = 0
+    open_rows = conn.execute(
+        "SELECT id, kind, ref FROM alerts WHERE vin = %s AND cleared_at IS NULL", (vin,)
+    ).fetchall()
+    open_refs: dict[str, set[str]] = {}
+    for _, kind, ref in open_rows:
+        open_refs.setdefault(kind, set()).add(ref)
+    current = evaluate(conn, vin, cfg, open_refs, now)
+    active = {(a.kind, a.ref) for a in current}
+    for alert_id, kind, ref in open_rows:
+        if (kind, ref) not in active:
+            conn.execute("UPDATE alerts SET cleared_at = %s WHERE id = %s", (now, alert_id))
+    new, seen = [], set()
+    for a in current:
+        # Two warnings can map to one ref; a second insert would break the open-alert index.
+        if a.ref in open_refs.get(a.kind, set()) or (a.kind, a.ref) in seen:
+            continue
+        seen.add((a.kind, a.ref))
+        new.append(a)
+    for a in new:
+        alert_id = conn.execute(
+            "INSERT INTO alerts (vin, kind, ref, title, message, raised_at)"
+            " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            (vin, a.kind, a.ref, a.title, a.message, now),
+        ).fetchone()[0]
         conn.commit()
+        raised += 1
+        if not notifier.configured:
+            continue
+        try:
+            notifier.send(a)
+            conn.execute("UPDATE alerts SET sent_at = now() WHERE id = %s", (alert_id,))
+        except httpx.HTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            err = f"HTTP {status}" if status else e.__class__.__name__
+            log.warning("Pushover send failed: %s", err)
+            conn.execute("UPDATE alerts SET send_error = %s WHERE id = %s", (err, alert_id))
+    conn.commit()
     return raised

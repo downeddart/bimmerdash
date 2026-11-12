@@ -88,6 +88,13 @@ def test_low_fuel_hysteresis_and_station():
     assert alerts.low_fuel(lv(fuel=26), 20, True) == []
 
 
+def test_num_rejects_non_finite():
+    assert alerts._num(lv(fuel="inf"), alerts.FUEL_PERCENT) is None
+    assert alerts._num(lv(fuel="nan"), alerts.FUEL_PERCENT) is None
+    assert alerts._num(lv(fuel="-"), alerts.FUEL_PERCENT) is None
+    assert alerts._num(lv(fuel="12.5"), alerts.FUEL_PERCENT) == 12.5
+
+
 def test_tyres_low_against_target():
     [a] = alerts.tyres(lv(fl=207, fl_target=234), 10, set())
     assert a.ref == "front left" and "30 psi" in a.message and "12% below" in a.message

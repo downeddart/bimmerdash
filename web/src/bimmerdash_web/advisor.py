@@ -13,6 +13,7 @@ import psycopg
 from . import economy
 from . import keys as K
 from .derived import _grade, stations_near
+from .health import _num
 from .queries import _measure, _val, latest
 
 DEFAULT_L100 = 7.0  # only until the car has reported its own economy
@@ -33,19 +34,24 @@ def _tank(conn: psycopg.Connection, vin: str) -> float | None:
 
 def advise(conn: psycopg.Connection, vin: str, radius_km: float = 8) -> dict:
     lv = latest(conn, vin)
-    lat, lon = _val(lv, K.LATITUDE), _val(lv, K.LONGITUDE)
+    lat, lon = _num(_val(lv, K.LATITUDE)), _num(_val(lv, K.LONGITUDE))
+    if lat is not None and lon is not None and (abs(lat) > 90 or abs(lon) > 180):
+        lat = lon = None
     pct = _val(lv, K.FUEL_PERCENT)
     litres_m = _measure(lv, K.FUEL_LITRES)
     range_m = _measure(lv, K.RANGE)
-    litres = float(litres_m["value"]) if litres_m and litres_m["value"] is not None else None
+    # The car sends placeholders such as "-"; treat anything unreadable as missing.
+    litres = _num(litres_m["value"]) if litres_m else None
+    rv = _num(range_m["value"]) if range_m else None
     range_km = None
-    if range_m and range_m["value"] is not None:
-        range_km = float(range_m["value"]) * (
+    if rv is not None:
+        range_km = rv * (
             economy.KM_PER_MILE if (range_m["unit"] or "").lower() in ("mi", "miles") else 1
         )
     tank = _tank(conn, vin)
+    pct = _num(pct)
     if litres is None and pct is not None and tank:
-        litres = tank * float(pct) / 100
+        litres = tank * pct / 100
     grade = _grade(conn, vin)
     econ = economy.best(conn, vin)
     l100 = econ["l100"] if econ else DEFAULT_L100

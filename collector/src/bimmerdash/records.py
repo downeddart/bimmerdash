@@ -22,6 +22,16 @@ def parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def _time_or_none(value: object) -> datetime | None:
+    """Parse an upstream timestamp; anything that isn't a readable ISO string is None."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return parse_time(value)
+    except ValueError:
+        return None
+
+
 def payload_hash(payload: object) -> bytes:
     canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.md5(canonical.encode()).digest()
@@ -52,7 +62,7 @@ def data_points(record: dict) -> list[DataPoint]:
     data = payload.get("data")
     if not isinstance(data, dict):
         return []
-    fallback = payload.get("timestamp") or record["received_at"]
+    fallback = _time_or_none(payload.get("timestamp")) or parse_time(record["received_at"])
     points = []
     for key, point in data.items():
         if isinstance(point, dict):
@@ -61,7 +71,7 @@ def data_points(record: dict) -> list[DataPoint]:
             value, unit, ts = point, None, None
         points.append(
             DataPoint(
-                time=parse_time(ts or fallback),
+                time=_time_or_none(ts) or fallback,
                 vin=vin,
                 key=key,
                 value=value,

@@ -128,6 +128,27 @@ def test_parsing():
     ]
 
 
+def test_parsing_tolerates_wrong_types():
+    # Upstream format drift must not raise: bad fields become None, bad prices are skipped.
+    odd = {
+        "node_id": "node-2",
+        "trading_name": ["not", "text"],
+        "location": "not a dict",
+        "is_motorway_service_station": "yes",
+        "fuel_types": ["E10", 5],
+        "fuel_prices": [
+            "junk",
+            {"fuel_type": "E10", "price": [1], "price_change_effective_timestamp": "x"},
+            {"fuel_type": "E5", "price": "139.9", "price_change_effective_timestamp": 1767261660},
+        ],
+    }
+    row = forecourt_row(odd)
+    assert row[1:8] == (None, None, None, None, None, None, None)
+    assert row[9] == ["E10"]
+    observed = datetime(2026, 11, 9, tzinfo=UTC)
+    assert price_rows(odd, observed) == [("node-2", "E5", observed, 139.9)]
+
+
 class FakeDb:
     def __init__(self, state):
         self.state = state

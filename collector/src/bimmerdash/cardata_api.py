@@ -120,18 +120,39 @@ def _check_vin(vin: str) -> None:
 WEBP_QUALITY = 90  # a 1000x600 render: ~40 KB, against ~185 KB as PNG
 
 
+MAX_IMAGE_BYTES = 10_000_000
+MAX_IMAGE_PIXELS = 4096 * 4096
+MAX_WEBP_SIDE = 16383  # WebP's limit
+
+
+class ImageError(ValueError):
+    """The image could not be read or is outside the sizes we accept."""
+
+
 def normalise_image(data: bytes) -> tuple[bytes, str]:
     """BMW labels renders image/jpeg but sends RGBA PNG: sniff, crop transparent margins,
-    store as WebP (with transparency) for a smaller page."""
-    img = Image.open(io.BytesIO(data))
-    img.load()
-    if img.mode in ("RGBA", "LA") or "transparency" in img.info:
-        img = img.convert("RGBA")
-        box = img.getchannel("A").point(lambda v: 255 if v > 4 else 0).getbbox()
-        if box:
-            img = img.crop(box)
-    out = io.BytesIO()
-    img.save(out, format="WEBP", quality=WEBP_QUALITY, method=6)
+    store as WebP (with transparency) for a smaller page.
+
+    Any failure is raised as ImageError, so callers handle one exception type."""
+    if len(data) > MAX_IMAGE_BYTES:
+        raise ImageError(f"image is {len(data)} bytes")
+    try:
+        img = Image.open(io.BytesIO(data))
+        w, h = img.size  # from the header, before decoding
+        if w * h > MAX_IMAGE_PIXELS or max(w, h) > MAX_WEBP_SIDE:
+            raise ImageError(f"image is {w}x{h}")
+        img.load()
+        if img.mode in ("RGBA", "LA") or "transparency" in img.info:
+            img = img.convert("RGBA")
+            box = img.getchannel("A").point(lambda v: 255 if v > 4 else 0).getbbox()
+            if box:
+                img = img.crop(box)
+        out = io.BytesIO()
+        img.save(out, format="WEBP", quality=WEBP_QUALITY, method=6)
+    except ImageError:
+        raise
+    except (OSError, ValueError, Image.DecompressionBombError) as e:
+        raise ImageError(f"{e.__class__.__name__}: {e}") from e
     return out.getvalue(), "image/webp"
 
 
@@ -146,7 +167,7 @@ def fetch_vehicle_details(api: CarDataApi, db: Database, vin: str) -> None:
         image, image_type = api.image(vin)
     except httpx.HTTPStatusError as e:
         log.warning("vehicle image failed: HTTP %s", e.response.status_code)
-    except OSError as e:  # PIL could not read it
+    except ImageError as e:
         log.warning("vehicle image unreadable: %s", e)
     db.save_vehicle_details(vin, basic, image, image_type)
     log.info(

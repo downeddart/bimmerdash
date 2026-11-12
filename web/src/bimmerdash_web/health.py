@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 from datetime import UTC, date, datetime
 
 import psycopg
@@ -30,9 +31,10 @@ def _num(v) -> float | None:
     if v is None or isinstance(v, bool):
         return None
     try:
-        return float(v)
+        f = float(v)
     except (TypeError, ValueError):
         return None
+    return f if math.isfinite(f) else None
 
 
 def _text(v) -> str | None:

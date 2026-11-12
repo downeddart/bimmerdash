@@ -92,7 +92,7 @@ class Database:
         for vin, data in rows:
             try:
                 image, ctype = normalise(bytes(data))
-            except OSError as e:
+            except (OSError, ValueError) as e:  # ImageError is a ValueError
                 log.warning("stored image for %s… unreadable: %s", vin[:5], e)
                 continue
             self.conn.execute(

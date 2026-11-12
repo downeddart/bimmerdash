@@ -3,19 +3,23 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import sys
 from datetime import timedelta
 
 import httpx
+import psycopg
 
 from .auth import AuthError, TokenStore, device_login
 from .cardata_api import CarDataApi, QuotaExceeded, fetch_vehicle_details
 from .config import Config, ConfigError
 from .db import Database
-from .discover import format_table, iter_records, summarise
+from .discover import format_table, iter_lines, iter_records, summarise
 from .stream import run_stream
+
+log = logging.getLogger(__name__)
 
 
 def cmd_login(cfg: Config) -> int:
@@ -81,15 +85,28 @@ def cmd_import_raw(cfg: Config) -> int:
         return 2
     db.migrate()
     files = sorted(cfg.raw_dir.glob("*.jsonl"))
-    messages = points = 0
-    for i, rec in enumerate(iter_records(files), 1):
-        points += db.ingest(rec, commit=False)
-        messages += 1
+    messages = points = skipped = 0
+    conn = db.conn
+    for i, (where, line) in enumerate(iter_lines(files), 1):
+        # Each record in its own savepoint: a bad line is skipped, not fatal, so the
+        # replay always gets past it. A lost connection still stops the run.
+        conn.execute("SAVEPOINT record")
+        try:
+            points += db._ingest(json.loads(line))
+            conn.execute("RELEASE SAVEPOINT record")
+            messages += 1
+        except psycopg.OperationalError:
+            raise
+        except Exception as e:
+            conn.execute("ROLLBACK TO SAVEPOINT record")
+            skipped += 1
+            log.warning("skipped %s: %s", where, e.__class__.__name__)
         if i % 1000 == 0:
             db.commit()
     db.commit()
     print(
         f"Read {messages} message(s) from {len(files)} file(s); stored {points} new data point(s)."
+        + (f" Skipped {skipped} unreadable record(s); see the log." if skipped else "")
     )
     return 0
 

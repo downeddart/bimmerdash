@@ -1,10 +1,12 @@
 import io
+import struct
+import zlib
 
 import httpx
 import pytest
 from PIL import Image
 
-from bimmerdash.cardata_api import CarDataApi, QuotaExceeded, normalise_image
+from bimmerdash.cardata_api import CarDataApi, ImageError, QuotaExceeded, normalise_image
 from bimmerdash.records import data_points, numeric, payload_hash, vin_of
 
 # Fake identifiers only — never real VIN/GCID/coordinates in tests.
@@ -135,3 +137,37 @@ def test_api_quota_blocks_without_calling():
 def test_api_rejects_bad_vin():
     with pytest.raises(ValueError):
         _api(lambda r: pytest.fail("no call"), FakeDb()).image("short")
+
+
+def _png_declaring(width: int, height: int) -> bytes:
+    """A tiny PNG whose header claims the given size (a decompression-bomb shape)."""
+    raw = _png((1, 1), (0, 0, 1, 1))
+    ihdr = struct.pack(">II", width, height) + raw[24:29]
+    chunk = b"IHDR" + ihdr
+    return raw[:8] + struct.pack(">I", 13) + chunk + struct.pack(">I", zlib.crc32(chunk)) + raw[33:]
+
+
+def test_normalise_image_rejects_huge_and_broken_images():
+    # Every failure comes out as ImageError, so callers never see Pillow's own types.
+    for bad in (_png_declaring(20000, 20000), _png_declaring(17000, 1), b"not an image"):
+        with pytest.raises(ImageError):
+            normalise_image(bad)
+    with pytest.raises(ImageError):
+        normalise_image(b"x" * 10_000_001)
+
+
+def test_data_points_tolerate_bad_timestamps():
+    rec = {
+        "received_at": "2026-01-01T10:00:00+00:00",
+        "topic": "t",
+        "payload": {
+            "vin": "WBA0000000TEST000",
+            "timestamp": "not a time",
+            "data": {
+                "k": {"value": 1, "timestamp": 1767261660},
+                "j": {"value": 2, "timestamp": "nope"},
+            },
+        },
+    }
+    points = data_points(rec)
+    assert [p.time.isoformat() for p in points] == ["2026-01-01T10:00:00+00:00"] * 2

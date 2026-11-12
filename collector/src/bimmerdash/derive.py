@@ -40,6 +40,7 @@ _SEGMENT = "vehicle.trip.segment.accumulated.drivetrain.transmission.setting."
 ECO_PRO = _SEGMENT + "fractionDriveEcoPro"
 ECO_PRO_PLUS = _SEGMENT + "fractionDriveEcoProPlus"
 KEYS = [ODOMETER, DOORS, LATITUDE, LONGITUDE, FUEL_LITRES, FUEL_PERCENT, ECO_PRO, ECO_PRO_PLUS]
+TEXT_KEYS = {DOORS}
 SEGMENT_LATE = timedelta(minutes=10)  # the trip summary can arrive just after the trip
 
 PARKED = "SECURED"  # locked from outside; LOCKED alone also happens while driving
@@ -383,8 +384,24 @@ def _load(conn, vin: str) -> dict[str, list[tuple]]:
     ).fetchall()
     out: dict[str, list[tuple]] = {k: [] for k in KEYS}
     for key, t, value, num in rows:
-        out[key].append((t, num if num is not None else value))
+        if key in TEXT_KEYS:
+            out[key].append((t, value))
+            continue
+        # The car sends placeholders such as "-"; a point we can't read is skipped.
+        n = _finite(num if num is not None else value)
+        if n is not None:
+            out[key].append((t, n))
     return out
+
+
+def _finite(v) -> float | None:
+    if v is None or isinstance(v, bool):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return None
+    return f if math.isfinite(f) else None
 
 
 def _pos_json(p: Position | None):
@@ -514,4 +531,12 @@ def _station_json(st: dict) -> dict:
 def rebuild_all(db, now: datetime | None = None) -> dict[str, tuple[int, int]]:
     vins = [r[0] for r in db.conn.execute("SELECT vin FROM vehicles").fetchall()]
     db.conn.commit()
-    return {vin: rebuild(db, vin, now) for vin in vins}
+    out = {}
+    for vin in vins:
+        # One car's bad data must not stop the others being derived.
+        try:
+            out[vin] = rebuild(db, vin, now)
+        except Exception as e:
+            db.conn.rollback()
+            log.error("deriving %s… failed: %s", vin[:5], e.__class__.__name__)
+    return out
