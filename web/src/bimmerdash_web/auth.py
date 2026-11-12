@@ -12,7 +12,7 @@ import os
 import secrets
 import threading
 import time
-from collections import defaultdict, deque
+from collections import deque
 from datetime import UTC, datetime, timedelta
 
 import psycopg
@@ -63,33 +63,46 @@ _DUMMY = hash_password(secrets.token_hex(8))
 
 
 class RateLimiter:
-    """Failed logins per client address: at most `limit` in `window` seconds."""
+    """Failed attempts per key (client address, or account): at most `limit` in `window`
+    seconds. attempt() checks and records in one step, so parallel requests can't all
+    slip past the limit; a success calls reset()."""
 
     def __init__(self, limit: int = 10, window: float = 900):
         self.limit, self.window = limit, window
-        self._fails: dict[str, deque] = defaultdict(deque)
+        self._fails: dict[str, deque] = {}
         self._lock = threading.Lock()
 
-    def _trim(self, key: str, now: float) -> deque:
-        q = self._fails[key]
+    def _trim(self, key: str, now: float) -> deque | None:
+        q = self._fails.get(key)
+        if q is None:
+            return None
         while q and now - q[0] > self.window:
             q.popleft()
+        if not q:
+            del self._fails[key]  # don't keep an entry per address forever
+            return None
         return q
 
-    def blocked(self, key: str) -> float:
-        """Seconds until another attempt is allowed (0 if allowed now)."""
+    def attempt(self, key: str) -> float:
+        """Reserve an attempt. Returns 0 if allowed (counted as a failure until reset),
+        else the seconds until another attempt is allowed."""
         now = time.monotonic()
         with self._lock:
+            for k in list(self._fails):  # logins are rare, so a full sweep is cheap
+                if k != key:
+                    self._trim(k, now)
             q = self._trim(key, now)
-            return max(0.0, self.window - (now - q[0])) if len(q) >= self.limit else 0.0
-
-    def failed(self, key: str) -> None:
-        with self._lock:
-            self._trim(key, time.monotonic()).append(time.monotonic())
+            if q is not None and len(q) >= self.limit:
+                return max(0.0, self.window - (now - q[0]))
+            self._fails.setdefault(key, deque()).append(now)
+            return 0.0
 
     def reset(self, key: str) -> None:
         with self._lock:
             self._fails.pop(key, None)
+
+    def __len__(self) -> int:
+        return len(self._fails)
 
 
 # --- storage -----------------------------------------------------------------------
@@ -113,12 +126,22 @@ def create_user(conn: psycopg.Connection, username: str, password: str) -> None:
     conn.execute("DELETE FROM web_sessions WHERE username = %s", (username,))
 
 
-def check_login(conn: psycopg.Connection, username: str, password: str) -> bool:
+def stored_hash(conn: psycopg.Connection, username: str) -> str | None:
     row = conn.execute(
         "SELECT password_hash FROM web_users WHERE username = %s", (username,)
     ).fetchone()
-    ok = verify_password(password, row[0] if row else _DUMMY)
-    return ok and row is not None
+    return row[0] if row else None
+
+
+def password_matches(stored: str | None, password: str) -> bool:
+    """Checks against a dummy hash for unknown users, so timing doesn't reveal them.
+    Call without holding a database connection: scrypt takes a while."""
+    ok = verify_password(password, stored or _DUMMY)
+    return ok and stored is not None
+
+
+def check_login(conn: psycopg.Connection, username: str, password: str) -> bool:
+    return password_matches(stored_hash(conn, username), password)
 
 
 def _token_hash(token: str) -> str:

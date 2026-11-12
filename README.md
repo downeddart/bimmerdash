@@ -53,7 +53,9 @@ Requires Docker with Compose, and a BMW account in a market that offers CarData.
    docker compose logs -f collector
    ```
    The web UI is at `http://<your-server>:8320` (change with `BIMMERDASH_WEB_PORT`).
-   It has no login yet: keep it on your home network or behind a reverse proxy with auth.
+   Open it and create your account straight away (see [Signing in](#signing-in)).
+   Keep it on your home network; for access from outside, put it behind a VPN or an HTTPS
+   reverse proxy.
 5. After some driving, see what your car reports:
    ```sh
    docker compose run --rm collector keys
@@ -126,6 +128,12 @@ one address are blocked for 15 minutes.
 If bimmerdash sits behind something that already requires a login (Authelia, Authentik,
 Cloudflare Access...), you can set `BIMMERDASH_AUTH=off`. Don't turn it off otherwise:
 there is no other protection.
+
+Behind an HTTPS reverse proxy, tell bimmerdash so the session cookie is marked `Secure`
+and failed logins are counted per real client: set `FORWARDED_ALLOW_IPS` on the `web`
+service to the proxy's address (uvicorn then trusts its `X-Forwarded-*` headers), or set
+`BIMMERDASH_COOKIE_SECURE=true` if you only need the cookie flag. Without either, every
+client appears to come from the proxy and shares one failed-login counter.
 
 ## Privacy
 

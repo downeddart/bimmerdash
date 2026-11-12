@@ -265,16 +265,35 @@ def test_password_hashing():
 
 
 def test_rate_limiter():
+    import threading
+
     from bimmerdash_web.auth import RateLimiter
 
     rl = RateLimiter(limit=3, window=60)
     for _ in range(3):
-        assert rl.blocked("1.2.3.4") == 0
-        rl.failed("1.2.3.4")
-    assert rl.blocked("1.2.3.4") > 0
-    assert rl.blocked("5.6.7.8") == 0  # other clients unaffected
+        assert rl.attempt("1.2.3.4") == 0
+    assert rl.attempt("1.2.3.4") > 0
+    assert rl.attempt("5.6.7.8") == 0  # other clients unaffected
     rl.reset("1.2.3.4")
-    assert rl.blocked("1.2.3.4") == 0
+    assert rl.attempt("1.2.3.4") == 0
+
+    # Check and record are one step: a burst of parallel attempts can't exceed the limit.
+    rl = RateLimiter(limit=10, window=60)
+    allowed = []
+    threads = [
+        threading.Thread(target=lambda: allowed.append(rl.attempt("x") == 0)) for _ in range(50)
+    ]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert sum(allowed) == 10
+
+    # Old entries are dropped rather than kept per address forever.
+    rl = RateLimiter(limit=3, window=0)
+    rl.attempt("a")
+    rl.attempt("b")
+    assert rl.attempt("c") == 0 and len(rl) == 1
 
 
 def test_login_flow(client, monkeypatch):
@@ -521,6 +540,42 @@ def test_fuel_advisor_tolerates_placeholders(client):
     assert r.json()["fuel"]["litres"] is None
 
 
+def test_security_headers_and_cookie_flag(client, monkeypatch):
+    for r in (client.get("/api/vehicles"), client.get("/api/health")):
+        assert r.headers["x-content-type-options"] == "nosniff"
+        assert r.headers["x-frame-options"] == "DENY"
+        assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
+    monkeypatch.setenv("BIMMERDASH_AUTH", "on")
+    denied = client.get("/api/status")
+    assert denied.status_code == 401 and denied.headers["x-frame-options"] == "DENY"
+
+    from starlette.requests import Request
+
+    from bimmerdash_web.app import cookie_secure
+
+    req = Request({"type": "http", "scheme": "http", "headers": [], "path": "/"})
+    assert cookie_secure(req) is False
+    monkeypatch.setenv("BIMMERDASH_COOKIE_SECURE", "true")
+    assert cookie_secure(req) is True
+
+
+def test_mileage_year_start_must_be_a_real_date(client):
+    url = f"/api/vehicles/{VIN}/settings"
+    for bad in ("9999-12-31", "2026-02-31"):
+        assert client.put(url, json={"mileage_year_start": bad}).status_code == 422
+    assert client.put(url, json={"mileage_year_start": "2026-04-01"}).status_code == 200
+
+
+def test_password_change_is_rate_limited(client, monkeypatch):
+    monkeypatch.setenv("BIMMERDASH_AUTH", "on")
+    client.post("/api/auth/setup", json={"username": "owner", "password": "correct horse 1"})
+    for _ in range(5):
+        r = client.post("/api/auth/password", json={"current": "wrong guess 12", "new": "x" * 12})
+        assert r.status_code == 403
+    r = client.post("/api/auth/password", json={"current": "correct horse 1", "new": "x" * 12})
+    assert r.status_code == 429
+
+
 def test_car_economy_costs_routes_and_mileage_limit(client):
     fuel_key = "vehicle.drivetrain.fuelSystem.consumptionOverLifeTime.overall.fuel"
     dist_key = "vehicle.drivetrain.fuelSystem.consumptionOverLifeTime.overall.referenceDistance"
@@ -598,6 +653,8 @@ def test_built_assets_are_compressed_and_cached(tmp_path, monkeypatch):
         assert "immutable" in js.headers["cache-control"]
         page = c.get("/fuel", headers={"Accept-Encoding": "gzip"})
         assert page.headers["cache-control"] == "no-cache"
+        assert "script-src 'self'" in page.headers["content-security-policy"]
+        assert c.get("/a%00b").status_code == 404  # was an unhandled 500
 
 
 def test_car_image_revalidates_with_etag(client):

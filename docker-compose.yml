@@ -47,6 +47,9 @@ services:
       BIMMERDASH_DATABASE_URL: postgresql://bimmerdash:${BIMMERDASH_DB_PASSWORD}@db:5432/bimmerdash
       BIMMERDASH_LOG_LEVEL: ${BIMMERDASH_LOG_LEVEL:-INFO}
       BIMMERDASH_AUTH: ${BIMMERDASH_AUTH:-on}
+      # Behind an HTTPS reverse proxy: the proxy's address, so uvicorn trusts its headers.
+      FORWARDED_ALLOW_IPS: ${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      BIMMERDASH_COOKIE_SECURE: ${BIMMERDASH_COOKIE_SECURE:-auto}
     ports:
       # Plain HTTP: fine on your LAN. For access from outside, put HTTPS in front.
       - "${BIMMERDASH_WEB_PORT:-8320}:8320"
