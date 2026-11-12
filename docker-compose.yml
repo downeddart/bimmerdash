@@ -1,6 +1,17 @@
+# App containers: read-only filesystem (writes only to /tmp and their volume), no Linux
+# capabilities, no privilege escalation.
+x-hardened: &hardened
+  read_only: true
+  tmpfs:
+    - /tmp
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+
 services:
   db:
-    image: timescale/timescaledb:2.17.2-pg16
+    image: timescale/timescaledb:2.17.2-pg16@sha256:4e459e217f00cbb09920c34d245501e63427e6767a495de57ce76823ff280f12
     restart: unless-stopped
     environment:
       POSTGRES_USER: bimmerdash
@@ -17,6 +28,7 @@ services:
 
   collector:
     image: ghcr.io/downeddart/bimmerdash-collector:${BIMMERDASH_VERSION:-latest}
+    <<: *hardened
     restart: unless-stopped
     env_file: .env
     environment:
@@ -31,6 +43,7 @@ services:
   prices:
     # UK fuel price history from the Fuel Finder open data scheme (optional).
     image: ghcr.io/downeddart/bimmerdash-collector:${BIMMERDASH_VERSION:-latest}
+    <<: *hardened
     restart: unless-stopped
     env_file: .env
     environment:
@@ -42,9 +55,12 @@ services:
 
   web:
     image: ghcr.io/downeddart/bimmerdash-web:${BIMMERDASH_VERSION:-latest}
+    <<: *hardened
     restart: unless-stopped
     environment:
-      BIMMERDASH_DATABASE_URL: postgresql://bimmerdash:${BIMMERDASH_DB_PASSWORD}@db:5432/bimmerdash
+      # With BIMMERDASH_WEB_DB_USER=bimmerdash_web and BIMMERDASH_WEB_DB_PASSWORD set, the UI
+      # uses a role that can only write its own tables (see .env.example).
+      BIMMERDASH_DATABASE_URL: postgresql://${BIMMERDASH_WEB_DB_USER:-bimmerdash}:${BIMMERDASH_WEB_DB_PASSWORD:-${BIMMERDASH_DB_PASSWORD}}@db:5432/bimmerdash
       BIMMERDASH_LOG_LEVEL: ${BIMMERDASH_LOG_LEVEL:-INFO}
       BIMMERDASH_AUTH: ${BIMMERDASH_AUTH:-on}
       # Behind an HTTPS reverse proxy: the proxy's address, so uvicorn trusts its headers.

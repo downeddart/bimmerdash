@@ -52,6 +52,7 @@ def db():
         "006_web_auth",
         "007_places",
         "008_health_alerts",
+        "009_web_role",
     ]
     yield d
     d.close()
@@ -99,7 +100,7 @@ def test_concurrent_migrations_wait_for_each_other():
         results = [f.result(timeout=60) for f in futures]
     for d in dbs:
         d.close()
-    assert sorted(len(r) for r in results) == [0, 0, 8]
+    assert sorted(len(r) for r in results) == [0, 0, 9]
 
 
 def test_migrations_are_committed(db):
@@ -456,3 +457,25 @@ def test_import_raw_skips_bad_records(db, tmp_path, capsys):
     # The truncated line is skipped; the int timestamp falls back to received_at.
     assert q(db, "SELECT count(*) FROM raw_messages") == [(3,)]
     assert "Skipped 1 unreadable record(s)" in capsys.readouterr().out
+
+
+def test_web_role_reads_everything_but_writes_only_its_own_tables(db):
+    from psycopg.conninfo import conninfo_to_dict, make_conninfo
+
+    db.ingest(rec("2026-11-10T16:00:00+00:00", 1000, "2026-11-10T16:00:00Z"))
+    db.set_web_password("test-web-password")
+    params = conninfo_to_dict(URL) | {"user": "bimmerdash_web", "password": "test-web-password"}
+    with psycopg.connect(make_conninfo(**params), autocommit=True) as web:
+        assert web.execute("SELECT count(*) FROM telemetry").fetchone()[0] == 1
+        web.execute(
+            "INSERT INTO places (name, lat, lon, radius_m) VALUES ('Home', 51.5, -0.1, 150)"
+        )
+        web.execute("DELETE FROM places")
+        for denied in (
+            "DELETE FROM telemetry",
+            "UPDATE vehicles SET model_name = 'x'",
+            "DROP TABLE settings",
+            "COPY places TO PROGRAM 'true'",
+        ):
+            with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                web.execute(denied)

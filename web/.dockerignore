@@ -1,0 +1,12 @@
+# Keep local clutter and secrets out of the build context.
+.env
+*.env
+**/__pycache__
+**/*.egg-info
+.pytest_cache
+.ruff_cache
+.venv
+build
+tests
+frontend/node_modules
+frontend/dist
