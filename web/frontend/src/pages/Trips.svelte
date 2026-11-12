@@ -44,6 +44,13 @@
   }
   const unit = $derived(distUnit(prefs.distance));
 
+  // Measured fuel is whole litres; estimates (from fill-ups) are marked ≈.
+  function fuelText(t) {
+    if (t.fuel_l == null) return null;
+    return t.fuel_basis === 'estimate' ? `≈${num(t.fuel_l, 1)}` : num(t.fuel_l);
+  }
+  const ECON_NOTE = { trips: (n) => `last 90 days, ${n} trips`, fillups: () => 'from your fill-ups' };
+
   onMount(() => {
     api.trips(vehicle.vin).then((d) => (data = d)).catch((e) => (error = e.message));
   });
@@ -66,7 +73,7 @@
     <div class="readout">
       <span class="label">Economy</span>
       <span class="value">{economy(s?.economy_l100, prefs.economy)}<span class="unit">{economyUnit(prefs.economy)}</span></span>
-      <span class="note">{s?.economy_l100 ? `last 90 days, ${s.economy_trips} trips` : 'needs a few trips with fuel readings'}</span>
+      <span class="note">{s?.economy_l100 ? ECON_NOTE[s.economy_source](s.economy_trips) : 'after your second fill-up'}</span>
     </div>
   </section>
 
@@ -82,7 +89,7 @@
           <li><button class="row" class:active={i === selected} onclick={() => (selected = i)} aria-current={i === selected ? 'true' : undefined}>
             <span class="when">{dateTime(t.start_time)}{#if route(t)}<span class="route small muted">{route(t)}</span>{/if}</span>
             <span class="km num">{km(t.distance_km)} {unit}</span>
-            <span class="small muted">{duration(t.minutes)}{t.fuel_used_l != null ? ` · ${num(t.fuel_used_l)} L` : ''}</span>
+            <span class="small muted">{duration(t.minutes)}{t.fuel_l != null ? ` · ${fuelText(t)} L` : ''}{t.economy_l100 ? ` · ${economy(t.economy_l100, prefs.economy)} ${economyUnit(prefs.economy)}` : ''}</span>
           </button></li>
         {/each}
       </ul>
@@ -105,15 +112,21 @@
             <div class="readout"><span class="label">Distance</span><span class="value">{km(trip.distance_km)}<span class="unit">{unit}</span></span></div>
             <div class="readout"><span class="label">Duration</span><span class="value">{duration(trip.minutes)}</span></div>
             <div class="readout"><span class="label">Average speed</span><span class="value">{speed ? num(toUnit(speed, prefs.distance)) : DASH}{#if speed}<span class="unit">{speedUnit(prefs.distance)}</span>{/if}</span></div>
-            <div class="readout"><span class="label">Fuel used</span><span class="value">{trip.fuel_used_l != null ? num(trip.fuel_used_l) : DASH}{#if trip.fuel_used_l != null}<span class="unit">L</span>{/if}</span></div>
+            <div class="readout">
+              <span class="label">Fuel used</span>
+              <span class="value">{trip.fuel_l != null ? fuelText(trip) : DASH}{#if trip.fuel_l != null}<span class="unit">L</span>{/if}</span>
+              {#if trip.economy_l100}<span class="note">{economy(trip.economy_l100, prefs.economy)} {economyUnit(prefs.economy)}</span>{/if}
+            </div>
             <div class="readout" title="Share of the trip driven in ECO PRO (and ECO PRO+) mode">
               <span class="label">ECO PRO</span>
               <span class="value">{trip.eco_pro_pct != null ? `${num(trip.eco_pro_pct + (trip.eco_pro_plus_pct ?? 0))}%` : DASH}</span>
             </div>
             <div class="readout"><span class="label">Odometer</span><span class="value">{trip.end_odometer != null ? num(toUnit(trip.end_odometer, prefs.distance)) : DASH}{#if trip.end_odometer != null}<span class="unit">{unit}</span>{/if}</span></div>
           </div>
-          {#if trip.fuel_used_l != null && trip.distance_km < 50}
-            <div class="small muted">Fuel is reported in whole litres, so short trips are rough.</div>
+          {#if trip.fuel_basis === 'estimate'}
+            <div class="small muted">≈ Estimated from your fill-ups: the car reports fuel in whole litres, too coarse to measure a short trip.</div>
+          {:else if trip.fuel_l != null && !trip.economy_l100}
+            <div class="small muted">Fuel is reported in whole litres, so short trips are rough. Economy is shown for trips of {prefs.distance === 'mi' ? '30 miles' : '50 km'} or more.</div>
           {/if}
         </div>
       {/if}

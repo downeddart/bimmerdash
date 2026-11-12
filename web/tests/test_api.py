@@ -744,3 +744,58 @@ def test_receipt_endpoints(client):
     f = client.get(f"/api/vehicles/{VIN}/fuel").json()["fillups"][0]
     assert f["receipt"] is None and f["cost_gbp"] == 48.4
     assert client.delete(url, params={"time": moved}).status_code == 404
+
+
+def test_trip_fuel_estimates_short_trips_and_shows_economy_on_long_ones():
+    from datetime import UTC, datetime
+
+    from bimmerdash_web.derived import trip_fuel, with_intervals
+
+    d = lambda day: datetime(2026, 11, day, 9, tzinfo=UTC)  # noqa: E731
+    fills = with_intervals(
+        [
+            {"time": d(1), "odometer": 1000, "litres_before": 10, "litres_after": 50},
+            {"time": d(10), "odometer": 1500, "litres_before": 20, "litres_after": 50},
+        ]
+    )  # 30 L over 500 km between them: 6.0 L/100 km
+    trips = [
+        {"start_time": d(5), "distance_km": 8.0, "fuel_used_l": 0.0},  # short, inside
+        {"start_time": d(6), "distance_km": 120.0, "fuel_used_l": 8.0},  # long: measured
+        {"start_time": d(12), "distance_km": 10.0, "fuel_used_l": 1.0},  # after: recent avg
+    ]
+    trip_fuel(trips, fills)
+    short, long, later = trips
+    assert (short["fuel_l"], short["fuel_basis"], short["economy_l100"]) == (0.5, "estimate", None)
+    assert (long["fuel_l"], long["fuel_basis"], long["economy_l100"]) == (8.0, "measured", 6.7)
+    assert (later["fuel_l"], later["fuel_basis"]) == (0.6, "estimate")
+
+    # No fill-up economy yet: the measured whole-litre figure, no estimate.
+    trips = [{"start_time": d(5), "distance_km": 8.0, "fuel_used_l": 1.0}]
+    trip_fuel(trips, fills[:1])
+    assert (trips[0]["fuel_l"], trips[0]["fuel_basis"]) == (1.0, "measured")
+
+
+def test_trip_economy_total_needs_enough_fuel_else_uses_fillups(client):
+    with psycopg.connect(URL, autocommit=True) as c:
+        for i in range(6):  # 6 short trips, 1 L each: 6 L, not enough on its own
+            c.execute(
+                "INSERT INTO trips (vin, start_time, end_time, distance_km, fuel_used_l, route)"
+                " VALUES (%s, now() - make_interval(days => %s), now() - make_interval(days => %s)"
+                " + interval '10 minutes', 5, 1, '[]')",
+                (VIN, i + 1, i + 1),
+            )
+    s = client.get(f"/api/vehicles/{VIN}/trips").json()["summary"]
+    assert s["economy_l100"] is None and s["economy_source"] is None  # no fill-ups either
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute(
+            "INSERT INTO fillups (vin, time, odometer, litres_before, litres_after) VALUES"
+            " (%s, now() - interval '20 days', 1000, 10, 50),"
+            " (%s, now() - interval '2 days', 1500, 20, 50)",
+            (VIN, VIN),
+        )
+    s = client.get(f"/api/vehicles/{VIN}/trips").json()["summary"]
+    assert (s["economy_l100"], s["economy_source"]) == (6.0, "fillups")
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute("UPDATE trips SET fuel_used_l = 2, distance_km = 25 WHERE vin = %s", (VIN,))
+    s = client.get(f"/api/vehicles/{VIN}/trips").json()["summary"]
+    assert (s["economy_l100"], s["economy_source"]) == (8.0, "trips")  # 12 L over 150 km

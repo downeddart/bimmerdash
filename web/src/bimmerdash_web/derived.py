@@ -10,6 +10,10 @@ from . import keys as K
 
 PRICE_RANGE = (80.0, 260.0)  # pence/litre; ignore obvious typos in Fuel Finder data
 STATION_PRICE_MAX_AGE_DAYS = 30
+# The car reports fuel in whole litres, so a trip's measured fuel is only meaningful on a
+# long drive, and the Trips page total only once enough measured fuel is behind it.
+LONG_TRIP_KM = 50
+MIN_TRIP_TOTAL_LITRES = 10
 
 
 def _ready(conn: psycopg.Connection) -> bool:
@@ -58,11 +62,44 @@ def trips(conn: psycopg.Connection, vin: str, limit: int = 200) -> dict:
         r["start_place"] = place_at(named, *(_coords(r["start"])))
         r["end_place"] = place_at(named, *(_coords(r["end"])))
         r["route"] = [{"time": t, "lat": la, "lon": lo} for t, la, lo in (r["route"] or [])]
-        r["economy_l100"] = _l100(r["fuel_used_l"], r["distance_km"])
-    return {"summary": trip_summary(conn, vin), "trips": rows}
+    fills = fill_intervals(conn, vin)
+    trip_fuel(rows, fills)
+    return {"summary": trip_summary(conn, vin, fillup_l100=fillup_economy(fills)), "trips": rows}
 
 
-def trip_summary(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dict:
+def trip_fuel(trips: list[dict], fills: list[dict]) -> None:
+    """What each trip shows for fuel: fuel_l, fuel_basis and (long trips) economy_l100.
+
+    A long trip shows its measured fuel and economy. A shorter one shows an estimate
+    (marked as one) from the economy between the fill-ups either side of it, else the
+    recent fill-up average: its whole-litre reading is mostly rounding. Without any
+    fill-up economy it falls back to the measured figure.
+    """
+    spans = [
+        (a["time"], b["time"], b["economy_l100"])
+        for a, b in zip(fills, fills[1:], strict=False)
+        if b["economy_l100"] is not None
+    ]
+    recent = fillup_economy(fills)
+    for t in trips:
+        km = t["distance_km"] or 0
+        measured = t["fuel_used_l"]
+        long = km >= LONG_TRIP_KM
+        t["economy_l100"] = _l100(measured, km) if long else None
+        l100 = next((e for a, b, e in spans if a <= t["start_time"] < b), recent)
+        t["fuel_estimated_l"] = round(km * l100 / 100, 1) if l100 and km > 0 else None
+        if (long and measured is not None) or t["fuel_estimated_l"] is None:
+            t["fuel_l"], t["fuel_basis"] = measured, "measured" if measured is not None else None
+        else:
+            t["fuel_l"], t["fuel_basis"] = t["fuel_estimated_l"], "estimate"
+
+
+def trip_summary(
+    conn: psycopg.Connection,
+    vin: str,
+    now: datetime | None = None,
+    fillup_l100: float | None = None,
+) -> dict:
     now = now or datetime.now(UTC)
     month = conn.execute(
         "SELECT count(*), COALESCE(sum(distance_km), 0),"
@@ -78,17 +115,48 @@ def trip_summary(conn: psycopg.Connection, vin: str, now: datetime | None = None
         " AND start_time > %s::timestamptz - interval '90 days'",
         (vin, now),
     ).fetchone()
+    if econ[0] is not None and econ[0] >= MIN_TRIP_TOTAL_LITRES:
+        l100, source = _l100(econ[0], econ[1]), "trips"
+    elif fillup_l100:
+        l100, source = fillup_l100, "fillups"
+    else:
+        l100, source = None, None
     return {
         "month_start": now.replace(day=1, hour=0, minute=0, second=0, microsecond=0),
         "month_trips": month[0],
         "month_km": round(month[1], 1),
         "month_minutes": round(month[2]),
-        "economy_l100": _l100(econ[0], econ[1]) if econ[2] and econ[2] >= 5 else None,
+        "economy_l100": l100,
+        "economy_source": source,
         "economy_trips": econ[2],
     }
 
 
 # --- fill-ups ----------------------------------------------------------------------
+
+
+def fill_intervals(conn: psycopg.Connection, vin: str) -> list[dict]:
+    """Fill-ups in time order with the distance and economy since the one before."""
+    return with_intervals(
+        _rows(
+            conn.execute(
+                "SELECT time, odometer, litres_before, litres_after FROM fillups"
+                " WHERE vin = %s ORDER BY time",
+                (vin,),
+            )
+        )
+    )
+
+
+def fillup_economy(fills: list[dict]) -> float | None:
+    """Economy over the last 10 fill-up intervals (fills as from with_intervals)."""
+    intervals = [f for f in fills if f["economy_l100"] is not None][-10:]
+    if not intervals:
+        return None
+    return _l100(
+        sum(f["used_since_last_l"] for f in intervals),
+        sum(f["km_since_last"] for f in intervals),
+    )
 
 
 def with_intervals(fills: list[dict]) -> list[dict]:
@@ -142,14 +210,7 @@ def fuel(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dic
     this_month = [f for f in costed if f["time"] >= month_start]
     total = sum(f["cost_gbp"] for f in costed)
     estimated = sum(f["cost_gbp"] for f in costed if f["price_source"] == "uk_average")
-    economy = (
-        _l100(
-            sum(f["used_since_last_l"] for f in intervals),
-            sum(f["km_since_last"] for f in intervals),
-        )
-        if intervals
-        else None
-    )
+    economy = fillup_economy(fills)
     # Cost per km: recent economy at the recent average price paid.
     recent = [f for f in costed if f["litres_added"]][-5:]
     avg_ppl = (
