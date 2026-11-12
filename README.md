@@ -1,147 +1,178 @@
 # bimmerdash
 
-Self-hosted logger and dashboard for BMW cars, built on BMW's official **CarData**
-streaming API. In the spirit of TeslaMate / RiviAmigo, but for BMWs, including
-combustion cars.
+**A self-hosted logbook for your BMW.** bimmerdash records your car's data through
+BMW's official CarData API and turns it into a private dashboard: what you spend on
+fuel, where and how much you drive, and how the car is doing. It's built for petrol and
+diesel BMWs, runs on your own server, and keeps everything there.
 
-> **Status: early.** bimmerdash signs in to BMW, records the CarData stream into
-> TimescaleDB, fetches your car's details and picture, and shows them in a dark web UI
-> with trips, detected fill-ups, fuel costs and local fuel prices.
+![The Fuel page: where to fill up next, economy, spend and local prices](docs/screenshots/fuel.webp)
+
+<sub>Screenshots use made-up demo data.</sub>
 
 Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 
-## Roadmap
+## What it does
 
-- [x] BMW sign-in (device code flow; your password never touches bimmerdash)
-- [x] Record the raw MQTT stream to disk
-- [x] `keys` command to see which data points your car sends
-- [x] PostgreSQL/TimescaleDB storage (every data point, any key)
-- [x] Vehicle details and BMW's render of your car (2 API calls, refreshed monthly)
-- [x] Trips, fill-ups and fuel economy
-- [x] Fuel cost via the UK Fuel Finder price data (UK weekly averages where no station price)
-- [x] Mileage and usage analytics (annual projection, when/where you drive, named places)
-- [x] Web UI: overview with your car's picture, raw data explorer (dark, mobile-friendly)
-- [x] Web UI: trips and fuel pages, with maps
-- [x] Login (single account, first-run setup, password reset command)
-- [x] Settings: miles or km, mpg or L/100 km, fuel grade (E10, E5, diesel)
-- [x] Web UI: insights page, live map of the car on Overview
-- [x] Car health: service schedule, MOT, tyre pressures against target, warning lights
-- [x] Economy from the car's own fuel counters (to 0.1 L, not the tank gauge)
-- [x] Refuel advisor: the cheapest station near the car, counting the drive there
-- [x] Running cost projection, regular journeys, yearly mileage limit tracking
-- [x] Alerts (left unlocked/open, low fuel, tyres, service due, warning lights), with Pushover
-- [ ] Stream-silent alert
+### Fuel and running costs
 
-## Quick start
+- **Every fill-up, found for you.** bimmerdash spots the jump in the fuel level and
+  works out which forecourt you were on. In the UK it prices the fill-up at that
+  station's own price on the day, from the government's Fuel Finder data.
+- **Exact costs when you want them.** The car reports fuel in whole litres, so a
+  detected fill-up can be out by a litre. Type in the receipt and it becomes exact.
+- **Where to fill up next.** Stations near the car, ranked by what a fill costs
+  including the drive there and back.
+- **Economy and cost per mile** from your own fill-ups, monthly spend, and prices near
+  home.
 
-Requires Docker with Compose, and a BMW account in a market that offers CarData.
+![Fill-ups, one with a receipt entered](docs/screenshots/fillups.webp)
 
-1. Set up CarData in the BMW portal: [docs/bmw-portal-setup.md](docs/bmw-portal-setup.md)
-2. Configure:
+### Trips and mileage
+
+- **Every journey**, from unlocking the car to locking it again, with distance, time,
+  fuel used, ECO PRO share and a map.
+- **Places**: name Home, Work and anywhere else you go, and trips are labelled with them.
+- **Insights**: projected annual mileage, a mileage limit tracker for leases and
+  insurance, running costs per month and per year, your regular journeys, when you drive,
+  and how many trips are too short for the engine to warm up.
+
+![Trips: each journey with its route](docs/screenshots/trips.webp)
+
+![Insights: annual mileage, running costs, mileage limit and when you drive](docs/screenshots/insights.webp)
+
+### Car health
+
+- **Service schedule and MOT**, as the car reports them, with dates and miles remaining.
+- **Tyre pressures** against the car's own target pressure, flagged when one is low.
+- **Warning lights** (Check Control messages).
+- **Alerts** on the Health page and, optionally, on your phone through Pushover: car left
+  unlocked or open, fuel low (with the cheapest station nearby), a tyre low, service or
+  MOT due within 30 days, and any warning light.
+
+![Health: service schedule, tyre pressures, warnings and alerts](docs/screenshots/health.webp)
+
+### On your phone
+
+The whole dashboard works on a phone, in a dark theme that's easy on the eyes.
+
+<p>
+  <img src="docs/screenshots/phone-overview.webp" alt="Overview on a phone" width="260">
+  &nbsp;
+  <img src="docs/screenshots/phone-fuel.webp" alt="Fuel page on a phone" width="260">
+</p>
+
+### Also
+
+- Miles or kilometres, mpg (UK) or L/100 km, and your fuel grade (E10, E5, diesel).
+- A data explorer showing every value your car sends.
+- A login, so the dashboard isn't open to everyone on your network.
+- Everything is recalculated from the recorded data, so improvements in new versions
+  apply to your past trips and fill-ups too.
+
+## What you need
+
+- A BMW account in a country where BMW offers CarData, with your car added to it.
+- A machine that's always on, with Docker and Docker Compose: a home server, a NAS or a
+  Raspberry Pi (amd64 and arm64 are both supported).
+- For station prices: UK only, with free UK Fuel Finder API access (optional). Without
+  it, fill-ups are priced at the UK weekly average and marked **~£ UK avg**.
+- For phone alerts: a Pushover account (optional).
+
+## Install
+
+1. **Set up CarData in the BMW portal.** It takes a few minutes:
+   [docs/bmw-portal-setup.md](docs/bmw-portal-setup.md)
+2. **Configure.** Download `docker-compose.yml` and `.env.example` from this repository
+   (or clone it), then:
    ```sh
    cp .env.example .env
-   # set BIMMERDASH_CLIENT_ID, and a database password:
+   # set BIMMERDASH_CLIENT_ID from the BMW portal, and a database password:
    echo "BIMMERDASH_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
    ```
-3. Sign in. A link and code appear; approve it in your browser:
+3. **Sign in to BMW.** A link and a code appear; approve them in your browser. Your BMW
+   password never touches bimmerdash.
    ```sh
    docker compose run --rm collector login
    ```
-4. Start recording:
+4. **Start it.**
    ```sh
    docker compose up -d
-   docker compose logs -f collector
    ```
-   The web UI is at `http://<your-server>:8320` (change with `BIMMERDASH_WEB_PORT`).
-   Open it and create your account straight away (see [Signing in](#signing-in)).
-   Keep it on your home network; for access from outside, put it behind a VPN or an HTTPS
-   reverse proxy.
-5. After some driving, see what your car reports:
-   ```sh
-   docker compose run --rm collector keys
-   docker compose run --rm collector keys --redact   # values hidden, safe to share in issues
-   ```
+5. **Open `http://<your-server>:8320` and create your account straight away**, before
+   anyone else on your network can (see [Signing in](#signing-in)).
 
-Images are published to `ghcr.io/downeddart/bimmerdash-collector` and
-`ghcr.io/downeddart/bimmerdash-web` (amd64 and arm64).
-Pin a version with `BIMMERDASH_VERSION` in `.env`.
+Trips appear after your next drive, and fill-ups after your next visit to a forecourt.
 
-### Other commands
+### Updating
 
-| Command | What it does |
+```sh
+docker compose pull && docker compose up -d
+```
+
+The database is upgraded automatically when the new version starts. To stay on a
+particular version, set `BIMMERDASH_VERSION` in `.env`. Images are published at
+`ghcr.io/downeddart/bimmerdash-collector` and `ghcr.io/downeddart/bimmerdash-web`.
+
+## Settings
+
+Most things are set on the dashboard's **Settings** page: units, fuel grade, tank size,
+mileage limit and which alerts you want. The rest lives in `.env`; every option is
+described in [`.env.example`](.env.example). The ones you're most likely to want:
+
+| Setting | What it's for |
 | --- | --- |
-| `derive` | Rebuild trips and fill-ups from stored data (the collector does this every few minutes) |
-| `import-raw` | Load recorded JSONL files into the database (safe to re-run) |
-| `fetch-vehicle` | Re-fetch vehicle details and picture now (2 API calls) |
-| `poll` | Fetch service, tyres, warnings and fuel use now (1 API call per car) |
-| `migrate` | Create/upgrade the database schema (the collector does this on start) |
+| `BIMMERDASH_FUEL_FINDER_CLIENT_ID`, `..._SECRET` | Station prices (UK Fuel Finder) |
+| `BIMMERDASH_PUSHOVER_TOKEN`, `..._USER` | Alerts on your phone |
+| `BIMMERDASH_PUBLIC_URL` | A link to the dashboard in each alert |
+| `BIMMERDASH_VIN` | Record only one car, if your account has several |
+| `BIMMERDASH_WEB_PORT` | Port for the dashboard (default 8320) |
+| `BIMMERDASH_REST_POLL_HOURS` | How often to fetch service, tyre and warning data (default every 4 hours) |
 
-### How trips and fill-ups are detected
+## How it works
 
-BMW doesn't send "trip" or "fill-up" events, so bimmerdash works them out:
+BMW's CarData sends a live stream of what the car reports: odometer, fuel level,
+position, doors and windows, and more. bimmerdash records all of it in a database on your
+machine, and works out the rest:
 
-- **Trip**: from opening the car until it is locked from outside, if the odometer moved
-  at least 1 km or the car's position changed. Positions arrive every few minutes, so
-  routes on the map are approximate.
-- **Fill-up**: a jump of 4 L or more in the fuel level. If the car reported a position on
-  a forecourt in between, the cost uses that station's price from UK Fuel Finder.
-  Otherwise it uses the UK weekly average price (DESNZ), shown as **~£ / UK avg**.
-  The car reports fuel in whole litres, so these costs can be out by a litre's worth.
-  **Add receipt** on the Fuel page records what you actually paid (and litres, if you
-  like); it then replaces the estimate and survives every recalculation.
-- **Economy** comes from fuel burned between fill-ups, so partial fills work too.
+- **A trip** runs from unlocking the car until it's locked from outside, if it moved.
+  The car reports its position every few minutes, so routes on the map are approximate.
+- **A fill-up** is a rise of 4 litres or more in the fuel level. If the car stopped on a
+  forecourt in between, that station's price is used; otherwise the UK weekly average.
+- **Economy** comes from the fuel burned between fill-ups, so partial fills work too.
+  Cars that report their own fuel counters get an even more precise figure.
 
-Everything is recalculated from the stored data, so improvements apply to past trips.
-For maps, your browser loads tiles from OpenStreetMap.
+A few things never come over the stream (service dates, warning lights, tyre targets),
+so bimmerdash asks BMW's API for them every few hours. BMW allows 50 API calls a day;
+bimmerdash uses about 6 and never goes past 45.
 
-BMW allows 50 CarData API calls per day. bimmerdash logs every call and stops at 45.
+Want to see what your own car sends? After a drive:
 
-### Health, economy and alerts
-
-Some values never come over the stream: the service schedule, Check Control warnings and
-the car's lifetime fuel counters. The collector asks BMW's REST API for them every 4 hours
-(one call per car, so 6 a day; `BIMMERDASH_REST_POLL_HOURS` changes it, `0` turns it off).
-The first time, it creates a *container* in your CarData account listing those keys.
-
-- **Economy** is the change in the car's own fuel and distance counters between polls,
-  so it's accurate to a tenth of a litre and doesn't need fill-ups.
-- **Refuel advisor** (Fuel page): stations within reach of the car, ranked by the cost of
-  filling up plus the fuel to drive there and back. It picks the nearest station unless
-  another saves at least 50p.
-- **Alerts** are listed on the Health page and, if you add Pushover keys to `.env`, sent to
-  your phone: left unlocked or open (once the car has been quiet for 10 minutes), fuel
-  low (with the cheapest station nearby), a tyre 10% below the car's target pressure, a
-  service or MOT due within 30 days, and any warning light. Each is sent once, and again
-  only after it has cleared. Turn them on and off in Settings.
+```sh
+docker compose run --rm collector keys
+docker compose run --rm collector keys --redact   # values hidden, safe to share
+```
 
 ## Signing in
 
-The web UI asks for a login. The first time you open it, it shows **Create your account**:
-do that straight away, because until an account exists anyone who can reach the page can
-create one. Or create it from the command line before opening the page:
+The first time you open the dashboard it asks you to **create your account**. Do it
+straight away: until an account exists, anyone who can reach the page could create one.
+You can also create it, or reset a forgotten password, from the command line:
 
 ```sh
 docker compose exec web bimmerdash-web set-password <username>
 ```
 
-The same command resets a forgotten password (and signs that account out everywhere).
-Passwords are stored as scrypt hashes; sessions last 30 days. Repeated failed logins from
-one address are blocked for 15 minutes.
+Sessions last 30 days. Repeated failed logins from one address are blocked for 15
+minutes.
 
-If bimmerdash sits behind something that already requires a login (Authelia, Authentik,
-Cloudflare Access...), you can set `BIMMERDASH_AUTH=off`. Don't turn it off otherwise:
-there is no other protection.
+**Keep the dashboard on your home network.** To reach it from outside, use a VPN, or put
+it behind an HTTPS reverse proxy. Behind a proxy, set `FORWARDED_ALLOW_IPS` to the
+proxy's address so bimmerdash sees real client addresses and marks the login cookie
+secure. If the proxy already requires its own login (Authelia, Authentik, Cloudflare
+Access), you can turn bimmerdash's off with `BIMMERDASH_AUTH=off`; don't otherwise.
 
-Behind an HTTPS reverse proxy, tell bimmerdash so the session cookie is marked `Secure`
-and failed logins are counted per real client: set `FORWARDED_ALLOW_IPS` on the `web`
-service to the proxy's address (uvicorn then trusts its `X-Forwarded-*` headers), or set
-`BIMMERDASH_COOKIE_SECURE=true` if you only need the cookie flag. Without either, every
-client appears to come from the proxy and shares one failed-login counter.
-
-### A separate database role for the web UI
-
-Optional, recommended. The web UI only needs to write its own tables (login, sessions,
-settings, places). Give it a role that can't do more:
+**Optional extra protection:** give the dashboard its own database login that can only
+change its own settings, not your recorded data:
 
 ```sh
 echo "BIMMERDASH_WEB_DB_USER=bimmerdash_web" >> .env
@@ -149,47 +180,35 @@ echo "BIMMERDASH_WEB_DB_PASSWORD=$(openssl rand -hex 24)" >> .env
 docker compose up -d
 ```
 
-The collector creates the role and sets its password when it starts; the web UI then
-connects with it. Without these two lines the UI uses the main role, as before.
-
 ## Privacy
 
-Everything stays on your machine. The data volume holds your BMW tokens, VIN and GPS
-history. Back it up, and **don't paste raw data or unredacted logs into public issues**.
+Everything stays on your machine. The only outside services are BMW (your car's data),
+the UK government's fuel price feeds, OpenStreetMap (map tiles, loaded by your browser)
+and Pushover if you turn it on.
 
-## Development
+Your database holds your BMW sign-in, your car's VIN and its location history: back it
+up, and keep it private. When asking for help, use `keys --redact`, and **don't paste raw
+data or logs into public issues**.
 
-```sh
-cd collector
-python3 -m venv .venv && . .venv/bin/activate
-pip install -e ".[dev]"
-pytest && ruff check .
-```
+## Commands
 
-Frontend (Svelte 5 + Vite) lives in `web/frontend`; `npm run dev` proxies `/api` to a
-running bimmerdash-web on port 8320.
+Run with `docker compose run --rm collector <command>`. You rarely need these: the
+collector does all of it on its own.
 
-Database tests run when `BIMMERDASH_TEST_DATABASE_URL` points at a disposable TimescaleDB.
-To run the stack from source, use the dev override:
+| Command | What it does |
+| --- | --- |
+| `login` | Sign in to BMW |
+| `keys` | List the values your car sends (`--redact` hides them) |
+| `derive` | Recalculate trips and fill-ups now |
+| `fetch-vehicle` | Re-fetch the car's details and picture now (2 API calls) |
+| `poll` | Fetch service, tyres, warnings and fuel use now (1 API call per car) |
+| `import-raw` | Load recorded raw stream files into the database (safe to re-run) |
+| `migrate` | Create or upgrade the database (done automatically on start) |
 
-```sh
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
-```
+## Contributing
 
-Install [pre-commit](https://pre-commit.com) (`pre-commit install`) so gitleaks checks
-every commit for secrets.
-
-### Updating dependencies
-
-Images install Python packages only from the hash-locked `collector/requirements.txt`
-and `web/requirements.txt`, and use base images pinned by digest. Dependabot proposes
-updates weekly. To change a dependency by hand, edit `pyproject.toml` and regenerate the
-lock in the same folder:
-
-```sh
-pip install "pip-tools==7.4.1" "click<8.2"
-pip-compile --allow-unsafe --generate-hashes --strip-extras -o requirements.txt pyproject.toml
-```
+Bug reports and pull requests are welcome. See [docs/development.md](docs/development.md)
+for running it from source, tests and dependency updates.
 
 ## License
 
