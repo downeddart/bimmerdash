@@ -6,9 +6,11 @@ are per car; the collector recalculates fill-up costs within a minute of a chang
 
 from __future__ import annotations
 
+from datetime import date
+
 import psycopg
 from psycopg.types.json import Jsonb
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 GRADES = {
     "E10": "E10 unleaded (standard petrol)",
@@ -60,6 +62,17 @@ class VehicleSettings(BaseModel):
     # Yearly mileage limit (insurance, PCP, lease) in km, and the day its year starts.
     mileage_limit_km: float | None = Field(None, ge=0, le=200_000)
     mileage_year_start: str | None = Field(None, pattern=r"^(\d{4}-\d{2}-\d{2})?$")
+
+    @field_validator("mileage_year_start")
+    @classmethod
+    def _real_date(cls, v: str | None) -> str | None:
+        # The pattern lets through 2026-02-31 or 9999-12-31; the usage page needs a real,
+        # plausible date (it adds a year to it).
+        if v:
+            d = date.fromisoformat(v)  # ValueError -> 422
+            if not 2000 <= d.year <= 2100:
+                raise ValueError("year must be between 2000 and 2100")
+        return v
 
 
 def _ready(conn: psycopg.Connection) -> bool:

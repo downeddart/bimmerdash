@@ -62,7 +62,7 @@
 
   function currentPath() {
     const p = location.hash.replace(/^#/, '') || '/';
-    return p in routes ? p : '/';
+    return Object.hasOwn(routes, p) ? p : '/';
   }
 
   async function loadStatus() {

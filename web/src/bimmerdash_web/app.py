@@ -22,6 +22,43 @@ VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
 STATIC_DIR = Path(os.environ.get("BIMMERDASH_STATIC_DIR", Path(__file__).parent / "static"))
 
 
+CSP = "; ".join(
+    [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",  # Svelte and Leaflet set inline styles
+        "img-src 'self' data: https://tile.openstreetmap.org",
+        "connect-src 'self'",
+        "font-src 'self'",
+        "object-src 'none'",
+        "base-uri 'none'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+    ]
+)
+
+
+def too_many(wait: float) -> None:
+    if wait:
+        raise HTTPException(
+            429,
+            "too many failed attempts; try again later",
+            headers={"Retry-After": str(int(wait) + 1)},
+        )
+
+
+def cookie_secure(request: Request) -> bool:
+    """BIMMERDASH_COOKIE_SECURE=true|false overrides; by default follow the request scheme.
+    Behind an HTTPS proxy, either set this to true or let uvicorn trust the proxy's
+    X-Forwarded-Proto (FORWARDED_ALLOW_IPS=<proxy address>)."""
+    v = os.environ.get("BIMMERDASH_COOKIE_SECURE", "auto").strip().lower()
+    if v in ("true", "1", "on", "yes"):
+        return True
+    if v in ("false", "0", "off", "no"):
+        return False
+    return request.url.scheme == "https"
+
+
 class BuiltAssets(StaticFiles):
     """Vite's build output. File names carry a content hash, so they never change."""
 
@@ -49,7 +86,8 @@ def create_app(database_url: str | None = None) -> FastAPI:
         redoc_url=None,
     )
     app.add_middleware(GZipMiddleware, minimum_size=1024)
-    limiter = auth.RateLimiter()
+    limiter = auth.RateLimiter()  # failed logins per client address
+    pw_limiter = auth.RateLimiter(limit=5)  # wrong current passwords per account
 
     def current_user(token: str | None) -> str | None:
         with pool.connection() as conn:
@@ -66,6 +104,20 @@ def create_app(database_url: str | None = None) -> FastAPI:
         request.state.user = user
         return await call_next(request)
 
+    # Registered last so it wraps everything, including the 401s above.
+    @app.middleware("http")
+    async def security_headers(request: Request, call_next):
+        response = await call_next(request)
+        h = response.headers
+        h.setdefault("X-Content-Type-Options", "nosniff")
+        h.setdefault("X-Frame-Options", "DENY")
+        h.setdefault("Referrer-Policy", "same-origin")
+        # The API docs page loads Swagger from a CDN; everything else is same-origin
+        # apart from the map tiles.
+        if request.url.path != "/api/docs":
+            h.setdefault("Content-Security-Policy", CSP)
+        return response
+
     def set_cookie(request: Request, response: Response, token: str) -> None:
         response.set_cookie(
             auth.COOKIE,
@@ -73,7 +125,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
             max_age=auth.SESSION_DAYS * 86400,
             httponly=True,
             samesite="lax",
-            secure=request.url.scheme == "https",
+            secure=cookie_secure(request),
             path="/",
         )
 
@@ -109,18 +161,13 @@ def create_app(database_url: str | None = None) -> FastAPI:
         if not auth.enabled():
             raise HTTPException(404)
         client = request.client.host if request.client else "unknown"
-        wait = limiter.blocked(client)
-        if wait:
-            raise HTTPException(
-                429,
-                "too many failed attempts; try again later",
-                headers={"Retry-After": str(int(wait) + 1)},
-            )
+        too_many(limiter.attempt(client))
         with pool.connection() as conn:
-            if not auth.check_login(conn, body.username, body.password):
-                limiter.failed(client)
-                raise HTTPException(401, "wrong username or password")
-            limiter.reset(client)
+            stored = auth.stored_hash(conn, body.username)
+        if not auth.password_matches(stored, body.password):  # scrypt, connection released
+            raise HTTPException(401, "wrong username or password")
+        limiter.reset(client)
+        with pool.connection() as conn:
             token = auth.new_session(conn, body.username, request.headers.get("user-agent"))
         set_cookie(request, response, token)
         return {"user": body.username}
@@ -137,9 +184,14 @@ def create_app(database_url: str | None = None) -> FastAPI:
         user = getattr(request.state, "user", None)
         if not auth.enabled() or user is None:
             raise HTTPException(404)
+        # A stolen session must not be able to guess its way to the password.
+        too_many(pw_limiter.attempt(user))
         with pool.connection() as conn:
-            if not auth.check_login(conn, user, body.current):
-                raise HTTPException(403, "current password is wrong")
+            stored = auth.stored_hash(conn, user)
+        if not auth.password_matches(stored, body.current):
+            raise HTTPException(403, "current password is wrong")
+        pw_limiter.reset(user)
+        with pool.connection() as conn:
             auth.create_user(conn, user, body.new)  # also signs out other sessions
             token = auth.new_session(conn, user, request.headers.get("user-agent"))
         set_cookie(request, response, token)
@@ -277,7 +329,7 @@ def create_app(database_url: str | None = None) -> FastAPI:
 
         @app.get("/{path:path}", include_in_schema=False)
         def spa(path: str):
-            if path.startswith("api/"):
+            if path.startswith("api/") or "\x00" in path:
                 raise HTTPException(404)
             f = (STATIC_DIR / path).resolve()
             if path and f.is_file() and STATIC_DIR.resolve() in f.parents:
