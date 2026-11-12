@@ -37,6 +37,9 @@
 
 html, body {
   margin: 0;
+  /* Nothing may make the page itself scroll sideways on a phone (wide tables scroll in
+     their own boxes). clip, unlike hidden, keeps the sticky header working. */
+  overflow-x: clip;
   background: var(--bg);
   color: var(--text);
   font-family: Inter, system-ui, sans-serif;
