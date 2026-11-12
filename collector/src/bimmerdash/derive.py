@@ -228,7 +228,13 @@ def detect_trips(
             s.start + timedelta(minutes=2), prev_end - timedelta(minutes=10) if prev_end else None
         )
         # Fuel after: the first reading once the drive has finished, before driving again.
-        f1 = litres.first_after(s.end - timedelta(minutes=10), next_start)
+        # It may trail the lock, or come a little before it, but it must be later than the
+        # "before" reading: on a trip under 10 minutes that window reaches back past the
+        # start, and the same reading would be both (0 L used).
+        after = s.end - timedelta(minutes=10)
+        if f0 is not None and f0[0] >= after:
+            after = f0[0] + timedelta(microseconds=1)
+        f1 = litres.first_after(after, next_start)
         if f1 is not None and f1[0] > s.end + timedelta(hours=6):
             f1 = None
         if f1 is None:  # else the last reading taken during the drive

@@ -100,6 +100,16 @@ def test_detect_trips_from_real_drive_shape():
     assert b.fuel_used_l == 1.0
 
 
+def test_short_trip_fuel_after_is_not_the_reading_before():
+    """A 9-minute trip: the car reports fuel as it's unlocked and again on arrival."""
+    doors = [(at("08:00"), "UNLOCKED"), (at("08:09"), "SECURED")]
+    odo = [(at("08:00"), 1000.0), (at("08:09"), 1008.0)]
+    fuel = [FuelReading(at("08:00"), 40.0, 77.0), FuelReading(at("08:08"), 39.4, 76.0)]
+    [t] = detect_trips(Series(odo), Series(doors), [], fuel, at("12:00"))
+    assert (t.fuel_start_l, t.fuel_end_l) == (40.0, 39.4)
+    assert round(t.fuel_used_l, 1) == 0.6
+
+
 def test_trip_without_door_data_uses_quiet_gaps():
     odo = [
         (at("08:00"), 100.0),
