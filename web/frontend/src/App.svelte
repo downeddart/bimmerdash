@@ -234,7 +234,8 @@
     nav { position: sticky; top: 0; height: 100vh; align-self: flex-start; overflow-y: auto; }
   }
   main:focus { outline: none; }
-  main { flex: 999 1 560px; min-width: 0; padding: 32px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 24px; }
+  /* Its own stacking context, below the header and tab bar (z-index 20). */
+  main { position: relative; z-index: 0; flex: 999 1 560px; min-width: 0; padding: 32px clamp(16px, 3vw, 40px) 48px; display: flex; flex-direction: column; gap: 24px; }
 
   @media (max-width: 820px) {
     /* Phone: slim header on top, the five main pages as a tab bar at the bottom. */
