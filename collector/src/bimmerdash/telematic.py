@@ -19,7 +19,7 @@ from datetime import UTC, datetime, timedelta
 import httpx
 from psycopg.types.json import Jsonb
 
-from .cardata_api import CarDataApi, QuotaExceeded
+from .cardata_api import VIN_RE, CarDataApi, QuotaExceeded
 
 log = logging.getLogger(__name__)
 
@@ -117,7 +117,8 @@ class TelematicPoller:
         self.db = db
         self.writer = writer
         self.every = every
-        self._next_try: datetime | None = None
+        self._next_try: datetime | None = None  # all cars (quota)
+        self._next_try_vin: dict[str, datetime] = {}  # one car (its own error)
 
     # --- container id, kept in collector_state --------------------------------------
 
@@ -162,6 +163,8 @@ class TelematicPoller:
     def due(self, vin: str, now: datetime) -> bool:
         if self._next_try and now < self._next_try:
             return False
+        if (t := self._next_try_vin.get(vin)) and now < t:
+            return False
         last = self.last_poll(vin)
         return last is None or now - last >= self.every
 
@@ -184,7 +187,7 @@ class TelematicPoller:
     def run_due(self, vins: list[str], now: datetime | None = None) -> None:
         now = now or datetime.now(UTC)
         for vin in vins:
-            if not self.due(vin, now):
+            if not VIN_RE.match(vin) or not self.due(vin, now):
                 continue
             try:
                 n = self.poll(vin, now)
@@ -199,5 +202,5 @@ class TelematicPoller:
                     "CarData REST poll failed: %s",
                     f"HTTP {status}" if status else e.__class__.__name__,
                 )
-                self._next_try = now + timedelta(minutes=30)
-                return
+                # Back off this car only; the others still get polled.
+                self._next_try_vin[vin] = now + timedelta(minutes=30)

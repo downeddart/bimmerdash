@@ -128,3 +128,24 @@ def test_refresh_keeps_fields_missing_from_response():
 def test_refresh_failure():
     with pytest.raises(AuthError):
         refresh("cid", _tokens(), _client(lambda r: httpx.Response(401, text=json.dumps({}))))
+
+
+def test_token_errors_log_only_oauth_fields():
+    from bimmerdash.auth import _error_text
+
+    r = httpx.Response(
+        400, json={"error": "invalid_grant", "error_description": "expired", "x": "leak"}
+    )
+    assert _error_text(r) == "invalid_grant expired"
+    assert _error_text(httpx.Response(500, text="<html>secret stack</html>")) == ""
+
+
+def test_token_store_tightens_an_existing_temp_file(tmp_path):
+    import os
+
+    path = tmp_path / "tokens.json"
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text("old")
+    os.chmod(tmp, 0o644)
+    TokenStore(path).save(_tokens())
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600

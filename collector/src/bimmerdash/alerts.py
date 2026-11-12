@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import time
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 
@@ -405,6 +406,52 @@ def save_channel(db, notifier: Notifier) -> None:
     db.conn.commit()
 
 
+MAX_PUSHES_PER_CYCLE = 5  # a burst of warnings shouldn't block the loop for minutes
+RETRY_FOR = timedelta(hours=6)  # keep trying an undelivered alert this long
+RETRY_EVERY = 300  # seconds between attempts for one alert
+_last_try: dict[int, float] = {}
+
+
+def deliver(
+    conn,
+    notifier: Notifier,
+    vin: str,
+    now: datetime,
+    budget: list[int],
+    priority: dict[tuple[str, str], int],
+) -> None:
+    """Push this car's open, undelivered alerts: new ones and earlier failed sends.
+    `priority` comes from this cycle's evaluation (it isn't stored)."""
+    if budget[0] <= 0:
+        return
+    rows = conn.execute(
+        "SELECT id, kind, ref, title, message FROM alerts WHERE vin = %s"
+        " AND cleared_at IS NULL AND sent_at IS NULL AND raised_at > %s"
+        " ORDER BY raised_at, id",
+        (vin, now - RETRY_FOR),
+    ).fetchall()
+    for alert_id, kind, ref, title, message in rows:
+        if budget[0] <= 0:
+            break
+        tried = _last_try.get(alert_id)
+        if tried is not None and time.monotonic() - tried < RETRY_EVERY:
+            continue
+        _last_try[alert_id] = time.monotonic()
+        budget[0] -= 1
+        try:
+            notifier.send(Alert(kind, ref, title, message, priority.get((kind, ref), 0)))
+            conn.execute(
+                "UPDATE alerts SET sent_at = now(), send_error = NULL WHERE id = %s", (alert_id,)
+            )
+            _last_try.pop(alert_id, None)
+        except httpx.HTTPError as e:
+            status = getattr(getattr(e, "response", None), "status_code", None)
+            err = f"HTTP {status}" if status else e.__class__.__name__
+            log.warning("Pushover send failed (will retry): %s", err)
+            conn.execute("UPDATE alerts SET send_error = %s WHERE id = %s", (err, alert_id))
+        conn.commit()
+
+
 def run(db, notifier: Notifier, now: datetime | None = None) -> int:
     """Evaluate every car, store new alerts, clear finished ones, push new ones.
 
@@ -417,17 +464,20 @@ def run(db, notifier: Notifier, now: datetime | None = None) -> int:
         conn.commit()
         return 0
     raised = 0
+    budget = [MAX_PUSHES_PER_CYCLE]  # shared by all cars this cycle
     for (vin,) in conn.execute("SELECT vin FROM vehicles").fetchall():
         # One car's bad data must not stop alerts for the others.
         try:
-            raised += _run_vin(conn, notifier, vin, cfg, now)
+            raised += _run_vin(conn, notifier, vin, cfg, now, budget)
         except Exception as e:
             conn.rollback()
             log.error("alert check failed for %s…: %s", vin[:5], e.__class__.__name__)
     return raised
 
 
-def _run_vin(conn, notifier: Notifier, vin: str, cfg: dict, now: datetime) -> int:
+def _run_vin(
+    conn, notifier: Notifier, vin: str, cfg: dict, now: datetime, budget: list[int]
+) -> int:
     """Evaluate one car: store new alerts, clear finished ones, push new ones."""
     raised = 0
     open_rows = conn.execute(
@@ -449,22 +499,15 @@ def _run_vin(conn, notifier: Notifier, vin: str, cfg: dict, now: datetime) -> in
         seen.add((a.kind, a.ref))
         new.append(a)
     for a in new:
-        alert_id = conn.execute(
+        conn.execute(
             "INSERT INTO alerts (vin, kind, ref, title, message, raised_at)"
-            " VALUES (%s, %s, %s, %s, %s, %s) RETURNING id",
+            " VALUES (%s, %s, %s, %s, %s, %s)",
             (vin, a.kind, a.ref, a.title, a.message, now),
-        ).fetchone()[0]
+        )
         conn.commit()
         raised += 1
-        if not notifier.configured:
-            continue
-        try:
-            notifier.send(a)
-            conn.execute("UPDATE alerts SET sent_at = now() WHERE id = %s", (alert_id,))
-        except httpx.HTTPError as e:
-            status = getattr(getattr(e, "response", None), "status_code", None)
-            err = f"HTTP {status}" if status else e.__class__.__name__
-            log.warning("Pushover send failed: %s", err)
-            conn.execute("UPDATE alerts SET send_error = %s WHERE id = %s", (err, alert_id))
+    if notifier.configured:
+        priority = {(a.kind, a.ref): a.priority for a in current}
+        deliver(conn, notifier, vin, now, budget, priority)
     conn.commit()
     return raised

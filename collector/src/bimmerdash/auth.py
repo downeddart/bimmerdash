@@ -80,12 +80,25 @@ class TokenStore:
         return Tokens(**json.loads(self.path.read_text()))
 
     def save(self, tokens: Tokens) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         tmp = self.path.with_suffix(".tmp")
-        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+        os.fchmod(fd, 0o600)  # the mode above only applies if the file is new
         with os.fdopen(fd, "w") as f:
             json.dump(asdict(tokens), f)
         os.replace(tmp, self.path)
+
+
+def _error_text(r: httpx.Response) -> str:
+    """Only the OAuth error fields: an error body is logged, so don't echo the rest."""
+    try:
+        body = r.json()
+    except ValueError:
+        return ""
+    if not isinstance(body, dict):
+        return ""
+    parts = [body.get("error"), body.get("error_description")]
+    return " ".join(str(p)[:120] for p in parts if isinstance(p, str) and p)
 
 
 def device_login(
@@ -108,7 +121,7 @@ def device_login(
         headers={"Accept": "application/json"},
     )
     if r.status_code != 200:
-        raise AuthError(f"device code request failed: HTTP {r.status_code} {r.text[:200]}")
+        raise AuthError(f"device code request failed: HTTP {r.status_code} {_error_text(r)}")
     dc = r.json()
     # BMW dropped verification_uri_complete, so build it ourselves.
     url = f"{dc['verification_uri']}?user_code={dc['user_code']}"
@@ -155,5 +168,5 @@ def refresh(client_id: str, tokens: Tokens, http: httpx.Client) -> Tokens:
         headers={"Accept": "application/json"},
     )
     if r.status_code != 200:
-        raise AuthError(f"token refresh failed: HTTP {r.status_code} {r.text[:200]}")
+        raise AuthError(f"token refresh failed: HTTP {r.status_code} {_error_text(r)}")
     return Tokens.from_response(r.json(), previous=tokens)
