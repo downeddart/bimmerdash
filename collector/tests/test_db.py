@@ -53,6 +53,7 @@ def db():
         "007_places",
         "008_health_alerts",
         "009_web_role",
+        "010_fillup_receipts",
     ]
     yield d
     d.close()
@@ -100,7 +101,7 @@ def test_concurrent_migrations_wait_for_each_other():
         results = [f.result(timeout=60) for f in futures]
     for d in dbs:
         d.close()
-    assert sorted(len(r) for r in results) == [0, 0, 9]
+    assert sorted(len(r) for r in results) == [0, 0, 10]
 
 
 def test_migrations_are_committed(db):
@@ -471,6 +472,11 @@ def test_web_role_reads_everything_but_writes_only_its_own_tables(db):
             "INSERT INTO places (name, lat, lon, radius_m) VALUES ('Home', 51.5, -0.1, 150)"
         )
         web.execute("DELETE FROM places")
+        web.execute(
+            "INSERT INTO fillup_receipts (vin, fillup_time, cost_gbp) VALUES (%s, now(), 50.04)",
+            (VIN,),
+        )
+        web.execute("DELETE FROM fillup_receipts")
         for denied in (
             "DELETE FROM telemetry",
             "UPDATE vehicles SET model_name = 'x'",

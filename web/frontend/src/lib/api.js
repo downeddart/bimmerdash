@@ -46,6 +46,8 @@ export const api = {
   usage: (vin) => get(`/vehicles/${enc(vin)}/usage`),
   health: (vin) => get(`/vehicles/${enc(vin)}/health`),
   advisor: (vin) => get(`/vehicles/${enc(vin)}/fuel/advisor`),
+  putReceipt: (vin, receipt) => put(`/vehicles/${enc(vin)}/fillups/receipt`, receipt),
+  deleteReceipt: (vin, time) => del(`/vehicles/${enc(vin)}/fillups/receipt?time=${enc(time)}`),
   places: () => get('/places'),
   addPlace: (place) => post('/places', place),
   renamePlace: (id, name) => put(`/places/${id}`, { name }),

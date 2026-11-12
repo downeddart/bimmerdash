@@ -86,6 +86,9 @@ BMW doesn't send "trip" or "fill-up" events, so bimmerdash works them out:
 - **Fill-up**: a jump of 4 L or more in the fuel level. If the car reported a position on
   a forecourt in between, the cost uses that station's price from UK Fuel Finder.
   Otherwise it uses the UK weekly average price (DESNZ), shown as **~£ / UK avg**.
+  The car reports fuel in whole litres, so these costs can be out by a litre's worth.
+  **Add receipt** on the Fuel page records what you actually paid (and litres, if you
+  like); it then replaces the estimate and survives every recalculation.
 - **Economy** comes from fuel burned between fill-ups, so partial fills work too.
 
 Everything is recalculated from the stored data, so improvements apply to past trips.
