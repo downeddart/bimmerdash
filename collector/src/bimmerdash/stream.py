@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import signal
 import threading
 import time
@@ -42,7 +43,13 @@ class RawWriter:
 
     def __init__(self, directory: Path):
         self.directory = directory
-        self.directory.mkdir(parents=True, exist_ok=True)
+        self.directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        # Raw data holds the VIN and GPS history: owner-only, also for files and folders
+        # created by older versions.
+        for d in (self.directory.parent, self.directory):
+            _chmod(d, 0o700)
+        for f in self.directory.glob("*.jsonl"):
+            _chmod(f, 0o600)
         self._lock = threading.Lock()
 
     def write(self, topic: str, payload: bytes, now: datetime | None = None) -> dict:
@@ -53,9 +60,19 @@ class RawWriter:
             body = payload.decode("utf-8", errors="replace")
         record = {"received_at": now.isoformat(), "topic": topic, "payload": body}
         path = self.directory / f"{now:%Y-%m-%d}.jsonl"
-        with self._lock, path.open("a") as f:
-            f.write(json.dumps(record, separators=(",", ":")) + "\n")
+        line = json.dumps(record, separators=(",", ":")) + "\n"
+        with self._lock:
+            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            with os.fdopen(fd, "a") as f:
+                f.write(line)
         return record
+
+
+def _chmod(path: Path, mode: int) -> None:
+    try:
+        path.chmod(mode)
+    except OSError as e:  # not ours (e.g. a bind mount); leave it
+        log.debug("could not chmod %s: %s", path, e)
 
 
 def run_stream(cfg: Config) -> int:

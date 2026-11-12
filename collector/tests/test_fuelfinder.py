@@ -128,6 +128,22 @@ def test_parsing():
     ]
 
 
+def test_paging_stops_at_a_ceiling(monkeypatch):
+    from bimmerdash import fuelfinder
+
+    monkeypatch.setattr(fuelfinder, "MAX_PAGES", 3)
+
+    def handler(req: httpx.Request):
+        if "oauth" in req.url.path:
+            return token_response()
+        return httpx.Response(200, json={"data": [STATION] * fuelfinder.PAGE_SIZE})
+
+    client = make_client(handler)
+    with pytest.raises(FuelFinderError):
+        for _ in client.forecourts():
+            pass
+
+
 def test_parsing_tolerates_wrong_types():
     # Upstream format drift must not raise: bad fields become None, bad prices are skipped.
     odd = {

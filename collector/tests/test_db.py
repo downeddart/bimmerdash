@@ -456,3 +456,83 @@ def test_import_raw_skips_bad_records(db, tmp_path, capsys):
     # The truncated line is skipped; the int timestamp falls back to received_at.
     assert q(db, "SELECT count(*) FROM raw_messages") == [(3,)]
     assert "Skipped 1 unreadable record(s)" in capsys.readouterr().out
+
+
+def test_poller_backs_off_only_the_failing_car(db, tmp_path):
+    import httpx
+
+    from bimmerdash.cardata_api import CarDataApi
+    from bimmerdash.telematic import TelematicPoller
+
+    polled = []
+
+    def handler(request):
+        if request.method == "POST":
+            return httpx.Response(201, json={"containerId": "c-1"})
+        vin = request.url.path.split("/")[3]
+        polled.append(vin)
+        if vin == VIN:
+            return httpx.Response(500)
+        return httpx.Response(200, json={"telematicData": {}})
+
+    api = CarDataApi(httpx.Client(transport=httpx.MockTransport(handler)), lambda: "t", db)
+    poller = TelematicPoller(api, db, None, timedelta(hours=4))
+    now = datetime(2026, 11, 10, 17, 0, tzinfo=UTC)
+    poller.run_due([VIN, OTHER_VIN, "not-a-vin"], now)
+    assert polled == [VIN, OTHER_VIN]  # the failure didn't stop the next car
+    polled.clear()
+    poller.run_due([VIN, OTHER_VIN], now + timedelta(minutes=10))
+    assert VIN not in polled  # backed off for 30 min
+
+
+def test_fuel_finder_state_rejects_unknown_fields(db):
+    with pytest.raises(ValueError):
+        db.set_fuel_finder_state(**{"forecourts_at = now(); --": None})
+
+
+def test_alert_delivery_retries_and_is_capped(db):
+    import httpx
+
+    from bimmerdash import alerts
+
+    sent, fail = [], [True]
+
+    class FlakyNotifier:
+        configured = True
+
+        def send(self, alert):
+            if fail[0]:
+                raise httpx.ConnectError("down")
+            sent.append(alert)
+
+    cc = [{"type": f"W{i}", "severity": "HIGH"} for i in range(8)]
+    db.ingest(_point(VIN, "2026-11-10T16:00:00+00:00", {alerts.CHECK_CONTROL: cc}))
+    alerts._last_try.clear()
+    now = datetime(2026, 11, 10, 17, 0, tzinfo=UTC)
+    assert alerts.run(db, FlakyNotifier(), now) == 8
+    errors = q(db, "SELECT count(*) FROM alerts WHERE send_error IS NOT NULL")[0][0]
+    assert errors == alerts.MAX_PUSHES_PER_CYCLE  # capped, and the failures are recorded
+    fail[0] = False
+    alerts._last_try.clear()  # as if RETRY_EVERY had passed
+    alerts.run(db, FlakyNotifier(), now + timedelta(minutes=10))
+    assert len(sent) == alerts.MAX_PUSHES_PER_CYCLE and all(a.priority == 1 for a in sent)
+    alerts.run(db, FlakyNotifier(), now + timedelta(minutes=20))
+    assert len(sent) == 8
+    assert q(db, "SELECT count(*) FROM alerts WHERE sent_at IS NULL")[0][0] == 0
+
+
+def test_raw_files_are_private(tmp_path):
+    import stat
+
+    from bimmerdash.stream import RawWriter
+
+    raw = tmp_path / "raw"
+    raw.mkdir(mode=0o755)
+    old = raw / "2026-01-01.jsonl"
+    old.write_text("{}\n")
+    old.chmod(0o644)
+    w = RawWriter(raw)
+    w.write("t", b"{}", now=datetime(2026, 1, 2, tzinfo=UTC))
+    mode = lambda p: stat.S_IMODE(p.stat().st_mode)  # noqa: E731
+    assert mode(raw) == 0o700 and mode(old) == 0o600
+    assert mode(raw / "2026-01-02.jsonl") == 0o600

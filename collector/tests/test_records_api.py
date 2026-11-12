@@ -171,3 +171,27 @@ def test_data_points_tolerate_bad_timestamps():
     }
     points = data_points(rec)
     assert [p.time.isoformat() for p in points] == ["2026-01-01T10:00:00+00:00"] * 2
+
+
+def test_vin_comes_from_topic_and_must_be_well_formed():
+    good = "WBA0000000TEST000"
+    assert vin_of({"topic": f"gcid/{good}", "payload": {"vin": "WBA0000000TEST001"}}) == good
+    assert vin_of({"topic": "rest/telematicData", "payload": {"vin": good}}) == good
+    assert vin_of({"topic": "rest/telematicData", "payload": {"vin": "not-a-vin"}}) is None
+    assert vin_of({"topic": "gcid/IOQ00000000000000", "payload": {}}) is None
+
+
+def test_data_points_clamp_far_future_timestamps():
+    rec = {
+        "received_at": "2026-01-01T10:00:00+00:00",
+        "topic": "gcid/WBA0000000TEST000",
+        "payload": {
+            "vin": "WBA0000000TEST000",
+            "data": {
+                "far": {"value": 1, "timestamp": "2099-01-01T00:00:00Z"},
+                "soon": {"value": 2, "timestamp": "2026-01-01T12:00:00Z"},
+            },
+        },
+    }
+    times = {p.key: p.time.isoformat() for p in data_points(rec)}
+    assert times == {"far": "2026-01-01T10:00:00+00:00", "soon": "2026-01-01T12:00:00+00:00"}

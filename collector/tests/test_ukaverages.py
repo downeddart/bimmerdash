@@ -47,9 +47,18 @@ def test_fetch_all_discovers_csvs_via_content_api():
                 json={
                     "details": {
                         "attachments": [
-                            {"url": "https://assets.test/a.xlsx", "content_type": "application/x"},
-                            {"url": "https://assets.test/new.csv", "content_type": "text/csv"},
-                            {"url": "https://assets.test/old.csv", "content_type": "text/csv"},
+                            {
+                                "url": "https://assets.publishing.service.gov.uk/a.xlsx",
+                                "content_type": "application/x",
+                            },
+                            {
+                                "url": "https://assets.publishing.service.gov.uk/new.csv",
+                                "content_type": "text/csv",
+                            },
+                            {
+                                "url": "https://assets.publishing.service.gov.uk/old.csv",
+                                "content_type": "text/csv",
+                            },
                         ]
                     }
                 },
@@ -59,3 +68,33 @@ def test_fetch_all_discovers_csvs_via_content_api():
 
     rows = fetch_all(httpx.Client(transport=httpx.MockTransport(handler)))
     assert len(rows) == 8
+
+
+def test_fetch_all_only_follows_gov_uk_links_and_caps_size(monkeypatch):
+    from bimmerdash import ukaverages
+
+    fetched = []
+
+    def handler(req: httpx.Request):
+        if str(req.url) == CONTENT_API:
+            return httpx.Response(
+                200,
+                json={
+                    "details": {
+                        "attachments": [
+                            {"url": "http://169.254.169.254/x.csv", "content_type": "text/csv"},
+                            {"url": "https://evil.example/x.csv", "content_type": "text/csv"},
+                            {"url": "https://assets.publishing.service.gov.uk/a.csv"},
+                        ]
+                    }
+                },
+            )
+        fetched.append(str(req.url))
+        return httpx.Response(200, text=CSV)
+
+    http = httpx.Client(transport=httpx.MockTransport(handler))
+    assert fetch_all(http)
+    assert fetched == ["https://assets.publishing.service.gov.uk/a.csv"]
+    monkeypatch.setattr(ukaverages, "MAX_BYTES", 10)
+    with pytest.raises(ValueError):
+        fetch_all(http)
