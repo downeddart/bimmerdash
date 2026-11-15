@@ -54,6 +54,7 @@ def db():
         "008_health_alerts",
         "009_web_role",
         "010_fillup_receipts",
+        "011_distances_in_km",
     ]
     yield d
     d.close()
@@ -101,7 +102,7 @@ def test_concurrent_migrations_wait_for_each_other():
         results = [f.result(timeout=60) for f in futures]
     for d in dbs:
         d.close()
-    assert sorted(len(r) for r in results) == [0, 0, 10]
+    assert sorted(len(r) for r in results) == [0, 0, 11]
 
 
 def test_migrations_are_committed(db):
@@ -565,3 +566,70 @@ def test_raw_files_are_private(tmp_path):
     mode = lambda p: stat.S_IMODE(p.stat().st_mode)  # noqa: E731
     assert mode(raw) == 0o700 and mode(old) == 0o600
     assert mode(raw / "2026-01-02.jsonl") == 0o600
+
+
+def test_migration_converts_stored_miles_to_km(db):
+    c = db.conn
+    c.execute(
+        "INSERT INTO telemetry (time, vin, key, value, value_num, unit) VALUES"
+        " (now(), %s, 'vehicle.vehicle.travelledDistance', '100', 100, 'miles'),"
+        " (now() - interval '1 min', %s, 'vehicle.vehicle.travelledDistance', '160', 160, 'km')",
+        (VIN, VIN),
+    )
+    c.execute("DELETE FROM schema_migrations WHERE version = '011_distances_in_km'")
+    c.commit()
+    db.migrate()
+    rows = c.execute("SELECT value_num, unit FROM telemetry ORDER BY time").fetchall()
+    assert rows == [(160.0, "km"), (160.9344, "km")]
+
+
+def test_weekly_digest_sends_once_on_monday(db):
+    from datetime import UTC, datetime
+
+    from bimmerdash import digest
+
+    c = db.conn
+    db.save_vehicle_details(VIN, {"modelName": "320i"}, None, None)
+    c.execute("INSERT INTO settings (scope, key, value) VALUES (%s, 'tank_litres', '50')", (VIN,))
+    for day, pct in ((10, 80), (11, 78), (12, 79), (13, 74), (14, 90), (15, 86)):
+        c.execute(
+            "INSERT INTO telemetry (time, vin, key, value, value_num, unit) VALUES"
+            " (%s, %s, 'vehicle.drivetrain.fuelSystem.level', %s, %s, '%%')",
+            (datetime(2026, 11, day, 12, tzinfo=UTC), VIN, str(pct), pct),
+        )
+    c.execute(
+        "INSERT INTO trips (vin, start_time, end_time, distance_km, route) VALUES"
+        " (%s, '2026-11-11 08:00Z', '2026-11-11 08:30Z', 60, '[]'),"
+        " (%s, '2026-11-13 08:00Z', '2026-11-13 08:30Z', 40, '[]'),"
+        " (%s, '2026-11-04 08:00Z', '2026-11-04 08:30Z', 50, '[]')",
+        (VIN, VIN, VIN),
+    )
+    c.execute(
+        "INSERT INTO uk_average_fuel_prices (week_start, fuel, price)"
+        " VALUES ('2026-11-09', 'petrol', 150.0)"
+    )
+    c.execute(
+        "INSERT INTO settings (scope, key, value) VALUES ('global', 'distance_unit', '\"km\"'),"
+        " ('global', 'economy_unit', '\"l100\"')"
+    )
+    c.commit()
+    # 80 -> 78, wobble up to 79 and back down to 74: 6 points; 74 -> 90 is a fill-up;
+    # 90 -> 86: 4 more. 10 points of a 50 L tank = 5 L.
+    monday = datetime(2026, 11, 16, 9, tzinfo=UTC)
+    assert digest.fuel_used(c, VIN, *digest.week_bounds(monday)) == 5.0
+
+    class Sink:
+        configured = True
+        sent: list = []
+
+        def send(self, alert):
+            self.sent.append(alert)
+
+    sink = Sink()
+    assert digest.run(db, sink, datetime(2026, 11, 16, 7, tzinfo=UTC)) == 0  # too early
+    assert digest.run(db, sink, datetime(2026, 11, 15, 9, tzinfo=UTC)) == 0  # Sunday
+    assert digest.run(db, sink, monday) == 1
+    assert digest.run(db, sink, monday) == 0  # once a week
+    msg = sink.sent[0].message
+    assert msg.startswith("100 km in 2 trips (+100% on the week before)")
+    assert "Fuel: 5.0 L ≈ £7.50, 5.0 L/100 km" in msg

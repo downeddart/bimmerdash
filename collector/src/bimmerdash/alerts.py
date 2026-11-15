@@ -38,6 +38,7 @@ DEFAULTS = {
     "service": True,
     "service_days": 30,
     "warnings": True,
+    "weekly_digest": True,
 }
 
 DOORS = "vehicle.cabin.door.status"

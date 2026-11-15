@@ -195,3 +195,22 @@ def test_data_points_clamp_far_future_timestamps():
     }
     times = {p.key: p.time.isoformat() for p in data_points(rec)}
     assert times == {"far": "2026-01-01T10:00:00+00:00", "soon": "2026-01-01T12:00:00+00:00"}
+
+
+def test_distances_in_miles_are_stored_in_km():
+    from bimmerdash.records import data_points, to_km
+
+    assert to_km(66356.2, "miles") == (106789.952, "km")
+    assert to_km(300, "mi") == (482.803, "km")
+    assert to_km(106790, "km") == (106790, "km")
+    assert to_km("-", "miles") == ("-", "miles")  # placeholders stay as sent
+    rec = {
+        "received_at": "2026-11-14T15:59:39+00:00",
+        "topic": "t/WBA0000000TEST000",
+        "payload": {
+            "vin": "WBA0000000TEST000",
+            "data": {"vehicle.vehicle.travelledDistance": {"value": 100, "unit": "miles"}},
+        },
+    }
+    (p,) = data_points(rec)
+    assert p.unit == "km" and p.value_num == 160.934 and p.value == 160.934

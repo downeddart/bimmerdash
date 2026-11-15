@@ -2,7 +2,7 @@
   import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { ago, num, title, shortDate, DASH, dist, distUnit } from '../lib/format.js';
+  import { ago, num, title, shortDate, DASH, dist, distUnit, money, economy, economyUnit, perDistance } from '../lib/format.js';
   import { prefs } from '../lib/prefs.svelte.js';
   import { placeAt } from '../lib/geo.js';
   import MapView from '../components/MapView.svelte';
@@ -13,6 +13,11 @@
   let imageOk = $state(true);
   let places = $state([]);
   let health = $state(null);
+  let gl = $state(null);
+  const SOURCE_NOTE = { gauge: 'measured', fillups: 'from fill-ups', car_recent: "car's figure", car_lifetime: "car's lifetime", car_estimate: "car's estimate" };
+  const approx = $derived(gl?.price?.source === 'uk_average' ? '~' : '≈');
+  const gapPct = $derived(gl?.economy_l100 && gl?.car_estimate_l100 && gl.economy_source !== 'car_estimate'
+    ? Math.round((gl.economy_l100 / gl.car_estimate_l100 - 1) * 100) : null);
   const nextService = $derived(health?.services?.find((x) => x.due) ?? null);
   const healthText = $derived.by(() => {
     if (!health) return null;
@@ -103,6 +108,7 @@
     weeks = wk;
     api.places().then((p) => (places = p)).catch(() => {});
     api.health(vehicle.vin).then((x) => (health = x)).catch(() => {});
+    api.glance(vehicle.vin).then((x) => (gl = x)).catch(() => {});
   }
 
   onMount(() => {
@@ -152,6 +158,7 @@
       <div class="readout">
         <span class="label">Range</span>
         <span class="value">{o.range ? dist(o.range.value, prefs.distance) : DASH}<span class="unit">{distUnit(prefs.distance)}</span></span>
+        {#if gl?.real_range_km && o.range}<span class="note">≈ {dist(gl.real_range_km, prefs.distance)} at your real economy</span>{/if}
       </div>
       <div class="readout">
         <span class="label">Odometer</span>
@@ -163,6 +170,40 @@
       </div>
     </div>
   </section>
+
+  {#if gl?.economy_l100}
+    <section class="card glance" aria-labelledby="glance-h">
+      <div class="card-head"><h2 id="glance-h">What your driving costs</h2><a class="small more" href="#/fuel">Fuel</a></div>
+      <div class="strip inset" style="--cols: 4">
+        <div class="readout">
+          <span class="label">This week</span>
+          <span class="value">{gl.week_cost_gbp != null ? `${approx}${money(gl.week_cost_gbp)}` : DASH}</span>
+          <span class="note">{dist(gl.week_km, prefs.distance)} {distUnit(prefs.distance)}</span>
+        </div>
+        <div class="readout">
+          <span class="label">This month</span>
+          <span class="value">{gl.month_cost_gbp != null ? `${approx}${money(gl.month_cost_gbp)}` : DASH}</span>
+          <span class="note">{dist(gl.month_km, prefs.distance)} {distUnit(prefs.distance)}</span>
+        </div>
+        <div class="readout">
+          <span class="label">Per {prefs.distance === 'mi' ? 'mile' : 'km'}</span>
+          <span class="value">{gl.pence_per_km != null ? `${num(perDistance(gl.pence_per_km, prefs.distance), 1)}p` : DASH}</span>
+          <span class="note">{gl.price ? `at ${num(gl.price.ppl, 1)}p/L` : ''}</span>
+        </div>
+        <div class="readout">
+          <span class="label">Economy</span>
+          <span class="value">{economy(gl.economy_l100, prefs.economy)}<span class="unit">{economyUnit(prefs.economy)}</span></span>
+          <span class="note">{SOURCE_NOTE[gl.economy_source] ?? ''}</span>
+        </div>
+      </div>
+      {#if gapPct != null && Math.abs(gapPct) >= 5}
+        <p class="small insight">
+          The car assumes {economy(gl.car_estimate_l100, prefs.economy)} {economyUnit(prefs.economy)}; you're really getting {economy(gl.economy_l100, prefs.economy)}.
+          {#if gl.real_range_km && gl.range_km}Its {dist(gl.range_km, prefs.distance)} {distUnit(prefs.distance)} range is more like {dist(gl.real_range_km, prefs.distance)}.{/if}
+        </p>
+      {/if}
+    </section>
+  {/if}
 
   <section class="pair">
     <div class="card">
@@ -257,6 +298,11 @@
   .bay .strip { border-top: 0; }
   .fuel .gauge { margin-top: 6px; }
 
+  .glance .card-head { margin-bottom: 4px; }
+  .glance .more { color: var(--muted); }
+  .glance .more::after { content: ' →'; }
+  .glance .more:hover { color: var(--accent); }
+  .insight { margin: 12px 0 0; color: var(--text); }
   .pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr)); align-items: stretch; }
   .location { display: flex; flex-direction: column; }
   .location p { margin: 0; }

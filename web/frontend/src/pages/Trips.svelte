@@ -2,7 +2,7 @@
   import Skeleton from '../components/Skeleton.svelte';
   import { onMount } from 'svelte';
   import { api } from '../lib/api.js';
-  import { num, dateTime, time, duration, economy, economyUnit, DASH, toUnit, distUnit, speedUnit } from '../lib/format.js';
+  import { money, num, dateTime, time, duration, economy, economyUnit, DASH, toUnit, distUnit, speedUnit } from '../lib/format.js';
   import { prefs } from '../lib/prefs.svelte.js';
   import MapView from '../components/MapView.svelte';
 
@@ -49,7 +49,17 @@
     if (t.fuel_l == null) return null;
     return t.fuel_basis === 'estimate' ? `≈${num(t.fuel_l, 1)}` : num(t.fuel_l);
   }
-  const ECON_NOTE = { trips: (n) => `last 90 days, ${n} trips`, fillups: () => 'from your fill-ups' };
+  const ECON_NOTE = {
+    trips: (n) => `last 90 days, ${n} trips`,
+    fillups: () => 'from your fill-ups',
+    gauge: () => 'measured from the fuel gauge',
+    car_recent: () => "the car's recent figure",
+    car_lifetime: () => "the car's lifetime figure",
+    car_estimate: () => "the car's own estimate",
+  };
+  const BASIS = { fillups: 'your fill-ups', gauge: 'your measured economy', car_estimate: "the car's own estimate" };
+  const estPrice = $derived(s?.price?.source === 'uk_average');
+  const cost = (v) => (v == null ? '' : `${estPrice ? '~' : '≈'}${money(v)}`);
 
   onMount(() => {
     api.trips(vehicle.vin).then((d) => (data = d)).catch((e) => (error = e.message));
@@ -68,12 +78,16 @@
 {:else}
   <section class="strip boxed" aria-label="This month">
     <div class="readout"><span class="label">Distance this month</span><span class="value">{num(toUnit(s?.month_km, prefs.distance))}<span class="unit">{unit}</span></span></div>
-    <div class="readout"><span class="label">Trips</span><span class="value">{num(s?.month_trips)}</span></div>
+    <div class="readout">
+      <span class="label">Fuel cost this month</span>
+      <span class="value" class:est={estPrice}>{s?.month_cost_gbp != null ? cost(s.month_cost_gbp) : DASH}</span>
+      <span class="note">{num(s?.month_trips)} trip{s?.month_trips === 1 ? '' : 's'}{s?.price ? ` · at ${num(s.price.ppl, 1)}p/L` : ''}</span>
+    </div>
     <div class="readout"><span class="label">Time driving</span><span class="value">{duration(s?.month_minutes)}</span><span class="note">door open to locked</span></div>
     <div class="readout">
       <span class="label">Economy</span>
       <span class="value">{economy(s?.economy_l100, prefs.economy)}<span class="unit">{economyUnit(prefs.economy)}</span></span>
-      <span class="note">{s?.economy_l100 ? ECON_NOTE[s.economy_source](s.economy_trips) : 'after your second fill-up'}</span>
+      <span class="note">{s?.economy_l100 ? (ECON_NOTE[s.economy_source] ?? (() => ''))(s.economy_trips) : 'after about 40 km of driving'}</span>
     </div>
   </section>
 
@@ -89,7 +103,7 @@
           <li><button class="row" class:active={i === selected} onclick={() => (selected = i)} aria-current={i === selected ? 'true' : undefined}>
             <span class="when">{dateTime(t.start_time)}{#if route(t)}<span class="route small muted">{route(t)}</span>{/if}</span>
             <span class="km num">{km(t.distance_km)} {unit}</span>
-            <span class="small muted">{duration(t.minutes)}{t.fuel_l != null ? ` · ${fuelText(t)} L` : ''}{t.economy_l100 ? ` · ${economy(t.economy_l100, prefs.economy)} ${economyUnit(prefs.economy)}` : ''}</span>
+            <span class="small muted">{duration(t.minutes)}{t.fuel_l != null ? ` · ${fuelText(t)} L` : ''}{t.cost_gbp != null ? ` · ${cost(t.cost_gbp)}` : ''}{t.economy_l100 ? ` · ${economy(t.economy_l100, prefs.economy)} ${economyUnit(prefs.economy)}` : ''}</span>
           </button></li>
         {/each}
       </ul>
@@ -116,6 +130,7 @@
               <span class="label">Fuel used</span>
               <span class="value">{trip.fuel_l != null ? fuelText(trip) : DASH}{#if trip.fuel_l != null}<span class="unit">L</span>{/if}</span>
               {#if trip.economy_l100}<span class="note">{economy(trip.economy_l100, prefs.economy)} {economyUnit(prefs.economy)}</span>{/if}
+              {#if trip.cost_gbp != null}<span class="note" class:est={estPrice}>{cost(trip.cost_gbp)} of fuel</span>{/if}
             </div>
             <div class="readout" title="Share of the trip driven in ECO PRO (and ECO PRO+) mode">
               <span class="label">ECO PRO</span>
@@ -124,7 +139,7 @@
             <div class="readout"><span class="label">Odometer</span><span class="value">{trip.end_odometer != null ? num(toUnit(trip.end_odometer, prefs.distance)) : DASH}{#if trip.end_odometer != null}<span class="unit">{unit}</span>{/if}</span></div>
           </div>
           {#if trip.fuel_basis === 'estimate'}
-            <div class="small muted">≈ Estimated from your fill-ups: the car reports fuel in whole litres, too coarse to measure a short trip.</div>
+            <div class="small muted">≈ Estimated from {BASIS[s?.economy_source] ?? 'your fill-ups'}: the car reports fuel in whole litres, too coarse to measure a short trip.</div>
           {:else if trip.fuel_l != null && !trip.economy_l100}
             <div class="small muted">Fuel is reported in whole litres, so short trips are rough. Economy is shown for trips of {prefs.distance === 'mi' ? '30 miles' : '50 km'} or more.</div>
           {/if}
@@ -135,6 +150,7 @@
 {/if}
 
 <style>
+  .est { color: var(--warn); }
   header { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px 16px; flex-wrap: wrap; }
   .empty h2 { margin-bottom: 6px; }
   .split { display: grid; gap: 16px; grid-template-columns: minmax(0, 340px) minmax(0, 1fr); align-items: start; }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import psycopg
 
@@ -62,12 +62,50 @@ def trips(conn: psycopg.Connection, vin: str, limit: int = 200) -> dict:
         r["start_place"] = place_at(named, *(_coords(r["start"])))
         r["end_place"] = place_at(named, *(_coords(r["end"])))
         r["route"] = [{"time": t, "lat": la, "lon": lo} for t, la, lo in (r["route"] or [])]
+    from . import economy
+
     fills = fill_intervals(conn, vin)
-    trip_fuel(rows, fills)
-    return {"summary": trip_summary(conn, vin, fillup_l100=fillup_economy(fills)), "trips": rows}
+    fill_l100 = fillup_economy(fills)
+    plan = economy.best(conn, vin, fill_l100)
+    trip_fuel(rows, fills, plan["l100"] if plan else None)
+    price = fuel_price(conn, vin)
+    for r in rows:
+        r["cost_gbp"] = (
+            round(r["fuel_l"] * price["ppl"] / 100, 2) if price and r["fuel_l"] else None
+        )
+    summary = trip_summary(conn, vin, fillup_l100=fill_l100, plan=plan)
+    if summary["economy_l100"] and price:
+        summary["month_cost_gbp"] = round(
+            summary["month_km"] * summary["economy_l100"] / 100 * price["ppl"] / 100, 2
+        )
+    summary["price"] = price
+    return {"summary": summary, "trips": rows}
 
 
-def trip_fuel(trips: list[dict], fills: list[dict]) -> None:
+def fuel_price(conn: psycopg.Connection, vin: str) -> dict | None:
+    """Price per litre to cost driving with: what you paid lately, else local pumps."""
+    fills = _rows(
+        conn.execute(
+            "SELECT time, cost_gbp, litres_added, litres_estimated, price_source, price_ppl"
+            " FROM fillups WHERE vin = %s ORDER BY time DESC LIMIT 5",
+            (vin,),
+        )
+    )
+    from . import receipts
+
+    receipts.apply(fills, receipts.load(conn, vin))
+    paid = [f for f in fills if f["cost_gbp"] and f["litres_added"]]
+    if paid:
+        ppl = sum(f["cost_gbp"] for f in paid) * 100 / sum(f["litres_added"] for f in paid)
+        estimated = all(f["price_source"] == "uk_average" for f in paid)
+        return {"ppl": round(ppl, 1), "source": "uk_average" if estimated else "paid"}
+    from .usage import local_price
+
+    p = local_price(conn, vin)
+    return {"ppl": p["ppl"], "source": p["source"]} if p else None
+
+
+def trip_fuel(trips: list[dict], fills: list[dict], fallback_l100: float | None = None) -> None:
     """What each trip shows for fuel: fuel_l, fuel_basis and (long trips) economy_l100.
 
     A long trip shows its measured fuel and economy. A shorter one shows an estimate
@@ -80,7 +118,7 @@ def trip_fuel(trips: list[dict], fills: list[dict]) -> None:
         for a, b in zip(fills, fills[1:], strict=False)
         if b["economy_l100"] is not None
     ]
-    recent = fillup_economy(fills)
+    recent = fillup_economy(fills) or fallback_l100
     for t in trips:
         km = t["distance_km"] or 0
         measured = t["fuel_used_l"]
@@ -99,6 +137,7 @@ def trip_summary(
     vin: str,
     now: datetime | None = None,
     fillup_l100: float | None = None,
+    plan: dict | None = None,
 ) -> dict:
     now = now or datetime.now(UTC)
     month = conn.execute(
@@ -119,6 +158,8 @@ def trip_summary(
         l100, source = _l100(econ[0], econ[1]), "trips"
     elif fillup_l100:
         l100, source = fillup_l100, "fillups"
+    elif plan:
+        l100, source = plan["l100"], plan["source"]
     else:
         l100, source = None, None
     return {
@@ -204,6 +245,10 @@ def fuel(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dic
     for f in fills:
         if f["station"] and f["station"].get("trading_name"):
             f["station"]["trading_name"] = tidy_name(f["station"]["trading_name"])
+    from . import economy as _econ
+
+    plan = _econ.best(conn, vin, fillup_economy(fills))
+    missed_savings(conn, fills, plan["l100"] if plan else 7.0)
     intervals = [f for f in fills if f["economy_l100"] is not None][-10:]
     costed = [f for f in fills if f["cost_gbp"] is not None]
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
@@ -230,8 +275,10 @@ def fuel(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dic
         "pence_per_km": round(economy / 100 * avg_ppl, 1) if economy and avg_ppl else None,
         "avg_price_ppl": round(avg_ppl, 1) if avg_ppl else None,
         "uncosted_fillups": len(fills) - len(costed),
+        "missed_savings_gbp": round(sum(f["could_save_gbp"] or 0 for f in fills), 2),
+        "fillups_compared": sum(1 for f in fills if f["could_save_gbp"] is not None),
     }
-    from . import economy
+    from . import economy, gauge
     from .usage import local_price
 
     if summary["pence_per_km"] is None:
@@ -249,6 +296,9 @@ def fuel(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dic
         "monthly": monthly(costed),
         # The car's own fuel counters: the most precise economy figure available.
         "car_economy": economy.car_economy(conn, vin, now),
+        # Without counters: economy from the fuel gauge and the range readout.
+        "gauge": gauge.gauge_economy(conn, vin, now),
+        "price_trend": price_trend(conn, vin),
     }
 
 
@@ -412,3 +462,162 @@ def _cos(deg: float) -> float:
     import math
 
     return math.cos(math.radians(deg))
+
+
+def price_trend(conn: psycopg.Connection, vin: str, days: int = 60, radius_km: float = 8) -> dict:
+    """Pump prices near home over time: the middle and cheapest price each day.
+
+    Each station's price on a day is the last one it reported by the end of that day.
+    """
+    centre = home(conn, vin)
+    grade = _grade(conn, vin)
+    out = {"grade": grade, "daily": [], "change_7d": None, "uk_avg": None, "vs_uk": None}
+    if centre is None:
+        return out
+    near = stations_near(conn, centre["lat"], centre["lon"], grade, radius_km, limit=60)
+    ids = [s["node_id"] for s in near]
+    if len(ids) < 3:
+        return out
+    rows = conn.execute(
+        """
+        SELECT d::date, percentile_cont(0.5) WITHIN GROUP (ORDER BY p.price), min(p.price),
+               count(*)
+        FROM generate_series(current_date - %(days)s, current_date, interval '1 day') d
+        CROSS JOIN unnest(%(ids)s::text[]) AS s(node_id)
+        CROSS JOIN LATERAL (
+            SELECT price FROM fuel_prices
+            WHERE node_id = s.node_id AND fuel_type = %(grade)s
+              AND effective_at < d + interval '1 day'
+              AND effective_at > d - interval '30 days'
+              AND price BETWEEN %(lo)s AND %(hi)s
+            ORDER BY effective_at DESC LIMIT 1
+        ) p
+        GROUP BY 1 HAVING count(*) >= 3 ORDER BY 1
+        """,
+        {"days": days, "ids": ids, "grade": grade, "lo": PRICE_RANGE[0], "hi": PRICE_RANGE[1]},
+    ).fetchall()
+    out["daily"] = [
+        {"day": d, "median": round(m, 1), "min": round(lo, 1), "stations": n}
+        for d, m, lo, n in rows
+    ]
+    if len(rows) >= 8:
+        out["change_7d"] = round(rows[-1][1] - rows[-8][1], 1)
+    kind = "diesel" if grade.startswith("B") or grade == "HVO" else "petrol"
+    uk = conn.execute(
+        "SELECT price FROM uk_average_fuel_prices WHERE fuel = %s ORDER BY week_start DESC LIMIT 1",
+        (kind,),
+    ).fetchone()
+    if uk and rows:
+        out["uk_avg"] = round(uk[0], 1)
+        out["vs_uk"] = round(rows[-1][1] - uk[0], 1)
+    return out
+
+
+SAVINGS_RADIUS_KM = 5
+
+
+def missed_savings(conn: psycopg.Connection, fills: list[dict], l100: float = 7.0) -> None:
+    """For each priced fill-up, the best-value station near it that day and what it saves.
+
+    The saving counts the fuel to drive there and back from where you filled, so a
+    slightly cheaper station across town doesn't count. Sets cheapest: {name, price, km}
+    and could_save_gbp (0 when where you went was the best value). Needs a position
+    and the price per litre paid.
+    """
+    for f in fills:
+        f["cheapest"] = f["could_save_gbp"] = None
+        if f["lat"] is None or not f["price_ppl"] or not f["litres_added"]:
+            continue
+        grade = f["fuel_grade"] or "E10"
+        dlat = SAVINGS_RADIUS_KM / 111.32
+        dlon = dlat / _cos(f["lat"])
+        row = conn.execute(
+            """
+            WITH near AS (
+                SELECT node_id, trading_name,
+                       6371 * sqrt(power(radians(latitude - %(lat)s), 2)
+                         + power(radians(longitude - %(lon)s) * cos(radians(%(lat)s)), 2)) AS km
+                FROM forecourts
+                WHERE latitude BETWEEN %(lat)s - %(dlat)s AND %(lat)s + %(dlat)s
+                  AND longitude BETWEEN %(lon)s - %(dlon)s AND %(lon)s + %(dlon)s
+            )
+            SELECT n.trading_name, p.price, n.km FROM near n
+            CROSS JOIN LATERAL (
+                SELECT price FROM fuel_prices
+                WHERE node_id = n.node_id AND fuel_type = %(grade)s
+                  AND effective_at <= %(t)s AND effective_at > %(t)s - interval '14 days'
+                ORDER BY effective_at DESC LIMIT 1
+            ) p
+            WHERE n.km <= %(r)s AND p.price BETWEEN %(lo)s AND %(hi)s
+            ORDER BY p.price, n.km LIMIT 15
+            """,
+            {
+                "lat": f["lat"],
+                "lon": f["lon"],
+                "dlat": dlat,
+                "dlon": dlon,
+                "grade": grade,
+                "t": f["time"],
+                "r": SAVINGS_RADIUS_KM,
+                "lo": PRICE_RANGE[0],
+                "hi": PRICE_RANGE[1],
+            },
+        ).fetchall()
+        best, best_save = None, 0.0
+        for name, price, km in row:
+            detour = 2 * km * l100 / 100 * price / 100
+            save = (f["price_ppl"] - price) * f["litres_added"] / 100 - detour
+            if save > best_save:
+                best, best_save = (name, price, km), save
+        f["could_save_gbp"] = round(best_save, 2) if best else 0.0 if row else None
+        if best:
+            f["cheapest"] = {"name": tidy_name(best[0]), "price": best[1], "km": round(best[2], 1)}
+
+
+def glance(conn: psycopg.Connection, vin: str, now: datetime | None = None) -> dict:
+    """The money-and-economy headline for the Overview: what driving really costs you."""
+    from . import economy, gauge
+
+    now = now or datetime.now(UTC)
+    out = {
+        "economy_l100": None,
+        "economy_source": None,
+        "car_estimate_l100": None,
+        "real_range_km": None,
+        "range_km": None,
+        "price": None,
+        "pence_per_km": None,
+        "week_km": None,
+        "week_cost_gbp": None,
+        "month_km": None,
+        "month_cost_gbp": None,
+    }
+    if not _ready(conn):
+        return out
+    plan = economy.best(conn, vin, fillup_economy(fill_intervals(conn, vin)))
+    g = gauge.gauge_economy(conn, vin, now)
+    price = fuel_price(conn, vin)
+    if g:
+        out["car_estimate_l100"] = (g["car_estimate"] or {}).get("l100")
+        out["real_range_km"] = g["real_range_km"]
+        out["range_km"] = g["range_now_km"]
+    week_start = (now - timedelta(days=now.weekday())).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    week_km, month_km = conn.execute(
+        "SELECT COALESCE(sum(distance_km) FILTER (WHERE start_time >= %s), 0),"
+        " COALESCE(sum(distance_km) FILTER (WHERE start_time >= %s), 0)"
+        " FROM trips WHERE vin = %s",
+        (week_start, month_start, vin),
+    ).fetchone()
+    out["week_km"], out["month_km"] = round(week_km, 1), round(month_km, 1)
+    if plan:
+        out["economy_l100"], out["economy_source"] = plan["l100"], plan["source"]
+    if plan and price:
+        ppk = plan["l100"] / 100 * price["ppl"]
+        out["price"] = price
+        out["pence_per_km"] = round(ppk, 1)
+        out["week_cost_gbp"] = round(week_km * ppk / 100, 2)
+        out["month_cost_gbp"] = round(month_km * ppk / 100, 2)
+    return out

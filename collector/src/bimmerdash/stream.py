@@ -19,7 +19,7 @@ from pathlib import Path
 import httpx
 import paho.mqtt.client as mqtt
 
-from . import alerts
+from . import alerts, digest
 from .auth import AuthError, TokenStore, refresh
 from .cardata_api import CarDataApi, fetch_vehicle_details, normalise_image
 from .config import Config
@@ -259,6 +259,8 @@ def run_stream(cfg: Config) -> int:
                     raised = alerts.run(main_db, notifier)
                     if raised:
                         log.info("raised %d alert(s)", raised)
+                    if digest.run(main_db, notifier):
+                        log.info("weekly summary sent")
                 except Exception as e:
                     log.error("alert check failed: %s", e)
                     main_db._conn = None

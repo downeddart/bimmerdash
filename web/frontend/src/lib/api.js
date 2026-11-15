@@ -38,6 +38,7 @@ export const api = {
   vehicles: () => get('/vehicles'),
   status: () => get('/status'),
   overview: (vin) => get(`/vehicles/${enc(vin)}/overview`),
+  glance: (vin) => get(`/vehicles/${enc(vin)}/glance`),
   latest: (vin) => get(`/vehicles/${enc(vin)}/latest`),
   weekly: (vin, weeks = 8) => get(`/vehicles/${enc(vin)}/distance/weekly?weeks=${weeks}`),
   trips: (vin) => get(`/vehicles/${enc(vin)}/trips`),

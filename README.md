@@ -22,8 +22,17 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
   detected fill-up can be out by a litre. Type in the receipt and it becomes exact.
 - **Where to fill up next.** Stations near the car, ranked by what a fill costs
   including the drive there and back.
-- **Economy and cost per mile** from your own fill-ups, monthly spend, and prices near
-  home.
+- **Your real economy, even though the car never reports it.** bimmerdash measures it
+  from the fuel gauge and odometer, tank by tank, and compares it with what the car's
+  range readout assumes. If you use more fuel than the car thinks, it tells you, and
+  shows how far the fuel left will really take you.
+- **What every trip costs**, plus this week, this month and per mile, from the start.
+  You don't need to wait for a second fill-up.
+- **Did you fill up in the right place?** Each fill-up is checked against the best-value
+  station nearby that day, counting the detour to get there.
+- **Local price trend**: the typical price near home over the last two months, whether
+  it's rising or falling this week, and how it compares with the UK average.
+- Monthly spend and the cheapest stations near home.
 
 ![Fill-ups, one with a receipt entered](docs/screenshots/fillups.webp)
 
@@ -48,6 +57,8 @@ Not affiliated with or endorsed by BMW AG. "BMW" is a trademark of BMW AG.
 - **Alerts** on the Health page and, optionally, on your phone through Pushover: car left
   unlocked or open, fuel low (with the cheapest station nearby), a tyre low, service or
   MOT due within 30 days, and any warning light.
+- **A weekly summary on your phone** (with Pushover) every Monday morning: distance,
+  fuel used and what it cost, economy, and the cheapest station near home.
 
 ![Health: service schedule, tyre pressures, warnings and alerts](docs/screenshots/health.webp)
 
@@ -138,8 +149,12 @@ machine, and works out the rest:
   The car reports its position every few minutes, so routes on the map are approximate.
 - **A fill-up** is a rise of 4 litres or more in the fuel level. If the car stopped on a
   forecourt in between, that station's price is used; otherwise the UK weekly average.
-- **Economy** comes from the fuel burned between fill-ups, so partial fills work too.
-  Cars that report their own fuel counters get an even more precise figure.
+- **Economy** is measured from the fuel gauge. Its percent reading moves in steps of about
+  half a litre, so over 50 km or more the drop against the odometer gives your real
+  economy to within a few percent. Fill-to-fill economy takes over once you have two
+  fill-ups. Cars that report their own fuel counters get an even more precise figure.
+- **The car's own estimate** is fuel left divided by range left, which is the economy
+  the range readout assumes.
 
 A few things never come over the stream (service dates, warning lights, tyre targets),
 so bimmerdash asks BMW's API for them every few hours. BMW allows 50 API calls a day;

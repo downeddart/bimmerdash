@@ -48,6 +48,7 @@
     ['tyres', 'Tyre pressure low', "Below the car's own target pressure"],
     ['service', 'Service or MOT due', 'Shortly before the due date'],
     ['warnings', 'Warning lights', 'Any Check Control message from the car'],
+    ['weekly_digest', 'Weekly summary', 'Monday morning: last week’s distance, fuel and cost, and the cheapest station near home'],
   ];
 
   function setAlerts(patch) {
