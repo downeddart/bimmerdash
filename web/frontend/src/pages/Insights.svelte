@@ -46,7 +46,7 @@
   const lim = $derived(m?.limit);
   const routes = $derived(data?.routes ?? []);
   const PRICE_SOURCE = { local: 'median price near home', uk_average: 'UK weekly average (DESNZ)' };
-  const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups' };
+  const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups', gauge: 'measured from the fuel gauge', car_estimate: "the car's own estimate" };
   const limitPct = $derived(lim ? Math.min(100, (lim.used_km / lim.limit_km) * 100) : 0);
   const projPct = $derived(lim?.projected_km ? Math.min(100, (lim.projected_km / lim.limit_km) * 100) : 0);
 

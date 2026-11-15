@@ -53,6 +53,26 @@ def vin_of(record: dict) -> str | None:
     return vin if isinstance(vin, str) and VIN_RE.match(vin) else None
 
 
+KM_PER_MILE = 1.609344
+MILE_UNITS = {"mi", "mile", "miles"}
+
+
+def to_km(value: object, unit: str | None) -> tuple[object, str | None]:
+    """Distances in miles become km, so one key never mixes units.
+
+    The stream reports km, but a REST poll can report the same key (odometer, range) in
+    the account's units. The raw message keeps what BMW sent.
+    """
+    if (
+        isinstance(unit, str)
+        and unit.strip().lower() in MILE_UNITS
+        and isinstance(value, int | float)
+        and not isinstance(value, bool)
+    ):
+        return round(value * KM_PER_MILE, 3), "km"
+    return value, unit
+
+
 def numeric(value: object) -> float | None:
     if isinstance(value, bool):
         return 1.0 if value else 0.0
@@ -79,6 +99,7 @@ def data_points(record: dict) -> list[DataPoint]:
             value, unit, ts = point.get("value"), point.get("unit"), point.get("timestamp")
         else:
             value, unit, ts = point, None, None
+        value, unit = to_km(value, unit)
         points.append(
             DataPoint(
                 # A point dated far ahead would pin "latest" for good; use arrival time.

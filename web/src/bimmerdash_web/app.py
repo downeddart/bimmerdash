@@ -239,6 +239,11 @@ def create_app(database_url: str | None = None) -> FastAPI:
         with pool.connection() as conn:
             return queries.overview(queries.latest(conn, vin_or_404(vin)))
 
+    @app.get("/api/vehicles/{vin}/glance")
+    def glance(vin: str):
+        with pool.connection() as conn:
+            return derived.glance(conn, vin_or_404(vin))
+
     @app.get("/api/vehicles/{vin}/latest")
     def latest(vin: str):
         with pool.connection() as conn:

@@ -53,10 +53,31 @@
       ? { l100: ce.recent_l100, note: `car's own figure, last ${num(toUnit(ce.recent_km, prefs.distance))} ${distUnit(prefs.distance)}` }
       : s?.economy_l100
         ? { l100: s.economy_l100, note: `last ${s.economy_intervals} fill-up${s.economy_intervals > 1 ? 's' : ''}` }
-        : ce?.lifetime_l100
-          ? { l100: ce.lifetime_l100, note: `car's lifetime figure, ${num(toUnit(ce.lifetime_km, prefs.distance))} ${distUnit(prefs.distance)}` }
-          : null
+        : g?.recent
+          ? { l100: g.recent.l100, note: `measured, last ${num(toUnit(g.recent.km, prefs.distance))} ${distUnit(prefs.distance)}` }
+          : ce?.lifetime_l100
+            ? { l100: ce.lifetime_l100, note: `car's lifetime figure, ${num(toUnit(ce.lifetime_km, prefs.distance))} ${distUnit(prefs.distance)}` }
+            : g?.car_estimate
+              ? { l100: g.car_estimate.l100, note: "what the car's range readout assumes" }
+              : null
   );
+  // Economy measured from the fuel gauge, for cars that don't send their fuel use.
+  const g = $derived(data?.gauge);
+  const measured = $derived(g?.current_tank?.l100 ? g.current_tank : g?.recent ? { ...g.recent, recent: true } : null);
+  const carEst = $derived(g?.car_estimate?.l100 ?? null);
+  // How far the car's own assumption is from what you really get (+ = you use more).
+  const gapPct = $derived(measured && carEst ? Math.round((measured.l100 / carEst - 1) * 100) : null);
+  const maxTank = $derived(Math.max(1, ...(g?.tanks ?? []).map((t) => t.l100), measured?.l100 ?? 0));
+  const pt = $derived(data?.price_trend);
+  const trendPath = $derived.by(() => {
+    const d = pt?.daily ?? [];
+    if (d.length < 2) return null;
+    const ys = d.map((x) => x.median);
+    const lo = Math.min(...ys), hi = Math.max(...ys);
+    const span = Math.max(1, hi - lo);
+    return d.map((x, i) => `${i ? 'L' : 'M'}${((i / (d.length - 1)) * 100).toFixed(1)},${(22 - ((x.median - lo) / span) * 20).toFixed(1)}`).join(' ');
+  });
+  const unitWord = $derived(prefs.distance === 'mi' ? 'mile' : 'km');
   const adviceMarkers = $derived(
     !advice?.position
       ? []
@@ -71,7 +92,7 @@
           { lat: advice.position.lat, lon: advice.position.lon, colour: 'text', radius: 7, label: 'Your car' },
         ]
   );
-  const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups', assumed: 'a typical figure until the car reports its own' };
+  const ECON_SOURCE = { car_recent: "the car's recent economy", car_lifetime: "the car's lifetime economy", fillups: 'your fill-ups', gauge: 'your measured economy', car_estimate: "the car's own estimate", assumed: 'a typical figure until the car reports its own' };
   const SOURCE = { station: 'station price', receipt: 'receipt', uk_average: 'UK avg' };
 
   // Receipt entry: one fill-up at a time, keyed by its time.
@@ -211,6 +232,69 @@
     </div>
   </section>
 
+  {#if measured || carEst}
+    <section class="card real-econ" aria-labelledby="real-econ-h">
+      <div class="card-head"><h2 id="real-econ-h">Your real economy</h2><span class="small muted">measured from the fuel gauge</span></div>
+      <div class="re-grid">
+        <div class="re-main">
+          {#if measured}
+            <span class="re-big num">{economy(measured.l100, prefs.economy)}<span class="unit">{economyUnit(prefs.economy)}</span></span>
+            <span class="small muted">
+              {measured.recent ? 'last 30 days' : `this tank, since ${shortDate(measured.start)}`}:
+              {num(measured.litres, 1)} L over {num(toUnit(measured.km, prefs.distance))} {distUnit(prefs.distance)}{measured.plus_minus_pct ? ` · ±${measured.plus_minus_pct}%` : ''}
+            </span>
+          {:else}
+            <span class="re-big num muted">{DASH}</span>
+            <span class="small muted">Measured after about {prefs.distance === 'mi' ? '25 miles' : '40 km'} of driving on one tank.</span>
+          {/if}
+        </div>
+        <dl class="re-facts">
+          {#if carEst}
+            <div>
+              <dt>The car assumes</dt>
+              <dd class="num">{economy(carEst, prefs.economy)} {economyUnit(prefs.economy)}</dd>
+              {#if gapPct != null && Math.abs(gapPct) >= 3}
+                <dd class="small" class:warn={gapPct > 0} class:good={gapPct < 0}>
+                  {gapPct > 0 ? `You use ${gapPct}% more fuel, so its range is optimistic` : `You use ${-gapPct}% less fuel than it assumes`}
+                </dd>
+              {:else if gapPct != null}
+                <dd class="small muted">Close to what you really get</dd>
+              {/if}
+            </div>
+          {/if}
+          {#if g?.real_range_km}
+            <div>
+              <dt>Real range left</dt>
+              <dd class="num">≈ {num(toUnit(g.real_range_km, prefs.distance))} {distUnit(prefs.distance)}</dd>
+              <dd class="small muted">
+                {g.range_now_km ? `the car shows ${num(toUnit(g.range_now_km, prefs.distance))}` : ''}{g.range_check ? ` · it drops ${num(g.range_check.per_km, 1)} ${distUnit(prefs.distance)} for every ${unitWord} you drive` : ''}
+              </dd>
+            </div>
+          {/if}
+          {#if g?.recent && !measured?.recent}
+            <div>
+              <dt>Last 30 days</dt>
+              <dd class="num">{economy(g.recent.l100, prefs.economy)} {economyUnit(prefs.economy)}</dd>
+              <dd class="small muted">{num(toUnit(g.recent.km, prefs.distance))} {distUnit(prefs.distance)}, {num(g.recent.litres, 1)} L</dd>
+            </div>
+          {/if}
+        </dl>
+      </div>
+      {#if g?.tanks?.length}
+        <ul class="tanks" aria-label="Economy per tank">
+          {#each [...g.tanks].reverse() as t}
+            <li>
+              <span class="small">{shortDate(t.start)} – {shortDate(t.end)}</span>
+              <span class="tank-bar" aria-hidden="true"><span style:width={`${(t.l100 / maxTank) * 100}%`}></span></span>
+              <span class="num small">{economy(t.l100, prefs.economy)} {prefs.economy === 'mpg' ? 'mpg' : 'L/100 km'} <span class="muted">· {num(toUnit(t.km, prefs.distance))} {distUnit(prefs.distance)}</span></span>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      <p class="small muted">The car doesn't send its fuel use, so bimmerdash measures it: the drop on the fuel gauge (steps of about half a litre) against the odometer. The longer the stretch, the tighter the figure.</p>
+    </section>
+  {/if}
+
   <div class="two">
     <div class="card">
       <div class="card-head"><h2>Monthly spend</h2><span class="small muted">fuel only</span></div>
@@ -240,6 +324,17 @@
         <h2>{gradeName} near {nearby?.centre?.source === 'home' ? 'home' : 'the car'}</h2>
         <span class="small muted">UK Fuel Finder</span>
       </div>
+      {#if pt?.daily?.length > 1}
+        {@const last = pt.daily[pt.daily.length - 1]}
+        <div class="trend">
+          <svg viewBox="0 0 100 24" preserveAspectRatio="none" role="img" aria-label={`Typical local price over ${pt.daily.length} days, now ${num(last.median, 1)}p`}>
+            <path d={trendPath} fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke" />
+          </svg>
+          <p class="small">
+            Typical price <strong class="num">{num(last.median, 1)}p</strong>{#if pt.change_7d != null}, <span class:good={pt.change_7d < -0.4} class:warn={pt.change_7d > 0.4}>{Math.abs(pt.change_7d) < 0.5 ? 'steady' : `${pt.change_7d < 0 ? 'down' : 'up'} ${num(Math.abs(pt.change_7d), 1)}p`} this week</span>{/if}{#if pt.vs_uk != null}; {num(Math.abs(pt.vs_uk), 1)}p {pt.vs_uk < 0 ? 'below' : 'above'} the UK average{/if}.
+          </p>
+        </div>
+      {/if}
       {#if !nearby}
         <div class="muted">Loading…</div>
       {:else if !nearby.centre}
@@ -279,7 +374,7 @@
   {/if}
 
   <div class="card">
-    <div class="card-head"><h2>Fill-ups</h2><span class="small muted">{fills.length} detected from fuel level jumps</span></div>
+    <div class="card-head"><h2>Fill-ups</h2><span class="small muted">{fills.length} detected from fuel level jumps{s?.fillups_compared ? ` · ${s.missed_savings_gbp >= 0.5 ? `${money(s.missed_savings_gbp)} more than the best value nearby` : 'you chose well'}` : ''}</span></div>
     {#if !fills.length}
       <p class="muted">No fill-ups detected yet. After you next fill up, it appears here once the car reports its new fuel level, priced at that station's price where it can be matched.</p>
     {:else}
@@ -302,6 +397,11 @@
                     {:else}
                       <div class="small muted">{num(f.price_ppl, 1)}p/L · {SOURCE[f.price_source]}</div>
                     {/if}
+                  {/if}
+                  {#if f.could_save_gbp >= 0.5 && f.cheapest}
+                    <div class="small warn">{f.cheapest.name} was {num(f.cheapest.price, 1)}p, {num(toUnit(f.cheapest.km, prefs.distance), 1)} {distUnit(prefs.distance)} away: {money(f.could_save_gbp)} less after the detour</div>
+                  {:else if f.could_save_gbp != null}
+                    <div class="small good">Best value nearby that day</div>
                   {/if}
                 </td>
                 <td class="r">
@@ -396,4 +496,28 @@
   .money-in { display: inline-flex; align-items: center; gap: 6px; }
   .receipt-actions { display: flex; gap: 6px; }
   code { font-size: 12px; background: var(--card-3); padding: 1px 5px; border-radius: 4px; }
+
+  .real-econ .re-grid { display: grid; grid-template-columns: minmax(180px, 1fr) 2fr; gap: 20px; align-items: start; }
+  .re-main { display: flex; flex-direction: column; gap: 4px; }
+  .re-big { font-size: 2.6rem; font-weight: 650; line-height: 1.05; letter-spacing: -0.02em; }
+  .re-big .unit { font-size: 0.9rem; font-weight: 500; color: var(--muted); margin-left: 6px; letter-spacing: 0; }
+  .re-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px 20px; margin: 0; }
+  .re-facts div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .re-facts dt { font-size: 0.78rem; color: var(--muted); }
+  .re-facts dd { margin: 0; }
+  .re-facts dd.num { font-size: 1.15rem; font-weight: 600; }
+  .tanks { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+  .tanks li { display: grid; grid-template-columns: 9.5em 1fr auto; gap: 10px; align-items: center; }
+  .tank-bar { height: 6px; border-radius: 3px; background: var(--line-2); overflow: hidden; }
+  .tank-bar span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .trend { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; margin-bottom: 10px; }
+  .trend svg { width: 96px; height: 26px; display: block; }
+  .trend p { margin: 0; }
+  .good { color: var(--ok); }
+  .warn { color: var(--warn); }
+  @media (max-width: 640px) {
+    .real-econ .re-grid { grid-template-columns: 1fr; }
+    .tanks li { grid-template-columns: 1fr auto; }
+    .tanks .tank-bar { display: none; }
+  }
 </style>

@@ -88,12 +88,23 @@ def car_economy(conn: psycopg.Connection, vin: str, now: datetime | None = None)
 
 
 def best(conn: psycopg.Connection, vin: str, fillup_l100: float | None = None) -> dict | None:
-    """The economy to plan costs with: {l100, source}."""
+    """The economy to plan costs with: {l100, source}.
+
+    Most precise first: the car's fuel counters, then fill-to-fill, then the fuel gauge
+    over recent driving, then the figure the car's range readout assumes.
+    """
+    from . import gauge
+
     car = car_economy(conn, vin)
     if car and car["recent_l100"]:
         return {"l100": car["recent_l100"], "source": "car_recent"}
     if fillup_l100:
         return {"l100": fillup_l100, "source": "fillups"}
+    g = gauge.gauge_economy(conn, vin)
+    if g and g["recent"]:
+        return {"l100": g["recent"]["l100"], "source": "gauge"}
     if car and car["lifetime_l100"]:
         return {"l100": car["lifetime_l100"], "source": "car_lifetime"}
+    if g and g["car_estimate"]:
+        return {"l100": g["car_estimate"]["l100"], "source": "car_estimate"}
     return None

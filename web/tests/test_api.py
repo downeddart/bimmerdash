@@ -799,3 +799,97 @@ def test_trip_economy_total_needs_enough_fuel_else_uses_fillups(client):
         c.execute("UPDATE trips SET fuel_used_l = 2, distance_km = 25 WHERE vin = %s", (VIN,))
     s = client.get(f"/api/vehicles/{VIN}/trips").json()["summary"]
     assert (s["economy_l100"], s["economy_source"]) == (8.0, "trips")  # 12 L over 150 km
+
+
+def _readings(start, rows):
+    """Gauge readings: (minutes after start, odometer km, percent, litres, range km)."""
+    from datetime import timedelta
+
+    from bimmerdash_web.gauge import Reading
+
+    out = []
+    for mins, odo, pct, lit, rng in rows:
+        r = Reading(start + timedelta(minutes=mins), odo, pct, lit, rng)
+        r.fuel_l = pct * 52 / 100
+        out.append(r)
+    return out
+
+
+def test_gauge_measures_each_tank_and_the_cars_own_estimate():
+    from datetime import UTC, datetime
+
+    from bimmerdash_web import gauge
+
+    t0 = datetime(2026, 11, 10, 8, tzinfo=UTC)
+    rs = _readings(
+        t0,
+        [
+            (0, 1000, 60, 31, 400),
+            (60, 1030, 55, 29, 370),  # 2.6 L over 30 km: too short to call
+            (120, 1060, 50, 26, 330),
+            (130, 1062, 51, 27, 332),  # gauge wobbles up a step: not a fill-up
+            (200, 1090, 45, 23, 300),
+            (300, 1092, 90, 47, 600),  # filled up
+            (400, 1150, 82, 43, 540),
+        ],
+    )
+    tanks = gauge.tanks(rs)
+    assert [len(t) for t in tanks] == [5, 2]
+    first = gauge._stretch(tanks[0])
+    # 60% -> 45% of 52 L = 7.8 L over 90 km
+    assert first["litres"] == 7.8 and first["km"] == 90 and first["l100"] == 8.7
+    assert first["plus_minus_pct"] == 7  # one 0.52 L step either way
+    assert first["range_used_km"] == 100
+    assert gauge._stretch(tanks[0][:2])["l100"] is None  # 30 km says little
+    est = gauge.car_estimate(rs)
+    assert est["l100"] == round(100 * 0.82 * 52 / 540, 1)
+    assert est["daily"][0]["day"] == "2026-11-10"
+
+
+def test_gauge_economy_feeds_costs_without_fillups(client):
+    pct = "vehicle.drivetrain.fuelSystem.level"
+    lit = "vehicle.drivetrain.fuelSystem.remainingFuel"
+    rng = "vehicle.drivetrain.lastRemainingRange"
+    odo = "vehicle.vehicle.travelledDistance"
+    with psycopg.connect(URL, autocommit=True) as c:
+        c.execute(
+            "INSERT INTO settings (scope, key, value) VALUES (%s, 'tank_litres', '52')", (VIN,)
+        )
+        for hours_ago, o, p, r in (
+            (50, 107000, 80, 560),
+            (20, 107040, 74, 520),
+            (2, 107100, 70, 490),
+        ):
+            for key, v, unit in (
+                (odo, o, "km"),
+                (pct, p, "%"),
+                (lit, round(p * 0.52), "l"),
+                (rng, r, "km"),
+            ):
+                c.execute(
+                    "INSERT INTO telemetry (time, vin, key, value, value_num, unit) VALUES"
+                    " (now() - make_interval(hours => %s), %s, %s, %s, %s, %s)",
+                    (hours_ago, VIN, key, Jsonb(v), v, unit),
+                )
+        c.execute(
+            "INSERT INTO trips (vin, start_time, end_time, distance_km, fuel_used_l, route)"
+            " VALUES (%s, now() - interval '3 h', now() - interval '150 min', 12, 1, '[]')",
+            (VIN,),
+        )
+        c.execute(
+            "INSERT INTO uk_average_fuel_prices (week_start, fuel, price)"
+            " VALUES (current_date - 3, 'petrol', 150.0)"
+        )
+    g = client.get(f"/api/vehicles/{VIN}/fuel").json()["gauge"]
+    # 80% -> 70% of 52 L = 5.2 L over 100 km
+    assert g["current_tank"]["l100"] == 5.2 and g["recent"]["l100"] == 5.2
+    assert g["real_range_km"] == round(100 * 0.70 * 52 / 5.2)
+    assert g["range_check"]["per_km"] == 0.7
+    t = client.get(f"/api/vehicles/{VIN}/trips").json()
+    assert t["summary"]["economy_source"] == "gauge"
+    trip = t["trips"][0]
+    assert trip["fuel_basis"] == "estimate" and trip["fuel_l"] == 0.6
+    assert trip["cost_gbp"] == round(0.6 * 1.5, 2)  # at the UK average, no local prices
+    gl = client.get(f"/api/vehicles/{VIN}/glance").json()
+    assert gl["economy_source"] == "gauge" and gl["pence_per_km"] == round(5.2 * 1.5, 1)
+    assert gl["price"]["source"] == "uk_average"

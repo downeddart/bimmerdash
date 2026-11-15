@@ -30,6 +30,7 @@ ALERT_DEFAULTS = {
     "service": True,
     "service_days": 30,
     "warnings": True,
+    "weekly_digest": True,
 }
 DEFAULTS = {"distance_unit": "mi", "economy_unit": "mpg", "alerts": ALERT_DEFAULTS}
 # Saving these as 0 or "" removes them (back to automatic / not set).
@@ -47,6 +48,7 @@ class AlertSettings(BaseModel):
     service: bool | None = None
     service_days: int | None = Field(None, ge=7, le=120)
     warnings: bool | None = None
+    weekly_digest: bool | None = None
 
 
 class GlobalSettings(BaseModel):
